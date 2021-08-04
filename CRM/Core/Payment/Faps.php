@@ -423,6 +423,46 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
   }
 
   /**
+   * Does this payment processor support refund?
+   *
+   * @return bool
+   */
+  public function supportsRefund() {
+    return TRUE;
+  }
+
+  // might become a supported core function but for now just create our own function name
+  public function doRefund($params = []) {
+    $request = [
+      'refNumber' => $params['trxn_id'],
+      'transactionAmount' => sprintf('%01.2f', CRM_Utils_Rule::cleanMoney($params['total_amount'])),
+    ];
+
+    $options = [
+      'action' => 'Credit',
+      'test' => $this->is_test,
+    ];
+    $token_request = new CRM_Iats_FapsRequest($options);
+    // CRM_Core_Error::debug_var('token request', $request);
+    $credentials = [
+      'merchantKey' => $this->_paymentProcessor['signature'],
+      'processorId' => $this->_paymentProcessor['user_name']
+    ];
+    $result = $token_request->request($credentials, $request);
+
+    $this->error($result);
+
+    if (!empty($result['authResponse'] == 'ACCEPTED')) {
+      $refundParams = [
+        'refund_trxn_id' => $result['referenceNumber'],
+        'refund_status_id' =>  CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Completed'),
+        'refund_status_name' => 'Completed',
+      ];
+      return $refundParams;
+    }
+  }
+
+  /**
    * Support corresponding CiviCRM method
    */
   public function changeSubscriptionAmount(&$message = '', $params = array()) {

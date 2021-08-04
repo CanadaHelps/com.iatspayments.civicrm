@@ -197,6 +197,47 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
     ));
   }
 
+  /**
+   * Does this payment processor support refund?
+   *
+   * @return bool
+   */
+  public function supportsRefund() {
+    return TRUE;
+  }
+
+  // might become a supported core function but for now just create our own function name
+  public function doRefund($params = []) {
+    $iats = new CRM_Iats_iATSServiceRequest([
+      'type' => 'process',
+      'method' => 'acheft_refund',
+      'iats_domain' => $this->_profile['iats_domain'],
+     ]);
+     $request = [
+       'transactionId' => $params['trxn_id'],
+       'total' => (-1 * sprintf('%01.2f', CRM_Utils_Rule::cleanMoney($params['total_amount']))),
+       'customerIPAddress' => (function_exists('ip_address') ? ip_address() : $_SERVER['REMOTE_ADDR']),
+     ];
+     $credentials = [
+       'agentCode' => $this->_paymentProcessor['user_name'],
+       'password'  => $this->_paymentProcessor['password'],
+     ];
+     // Make the soap request.
+     $response = $iats->request($credentials, $request);
+
+     $result = $iats->result($response);
+     if ($result['status']) {
+       $refundParams = [
+         'refund_trxn_id' => trim($result['remote_id']) . ':' . time(),
+         'refund_status_id' =>  CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Completed'),
+         'refund_status_name' => 'Completed',
+       ];
+       return $refundParams;
+     }
+     else {
+       return self::error($result['reasonMessage']);
+     }
+  }
 
   /**
    *

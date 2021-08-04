@@ -75,6 +75,37 @@ class CRM_Iats_ExtensionUtil {
     return self::CLASS_PREFIX . '_' . str_replace('\\', '_', $suffix);
   }
 
+  /**
+   * Get iATS payment processor ID
+   *
+   * @param int $contributionID
+   *
+   * @return int|void
+   */
+  public static function getPaymentProcessorByContributionID($contributionID) {
+    $paymentProcessorID = civicrm_api3('EntityFinancialTrxn', 'get', [
+      'return' => ['financial_trxn_id.payment_processor_id'],
+      'entity_table' => 'civicrm_contribution',
+      'entity_id' => $contributionID,
+      'sequential' => 1,
+      'financial_trxn_id.is_payment' => TRUE,
+      'options' => ['sort' => 'financial_trxn_id DESC', 'limit' => 1],
+    ])['values'][0]['financial_trxn_id.payment_processor_id'] ?? NULL;
+
+    if ($paymentProcessorId) {
+      $className = civicrm_api3('PaymentProcessor', 'getvalue', [
+        'sequential' => 1,
+        'id' => $paymentProcessorID,
+        'return' => 'class_name',
+      ]);
+      if (!in_array($className, ['Payment_iATSServiceACHEFT', 'Payment_Faps'])) {
+        return NULL;
+      }
+    }
+
+    return $paymentProcessorID;
+  }
+
 }
 
 use CRM_Iats_ExtensionUtil as E;
