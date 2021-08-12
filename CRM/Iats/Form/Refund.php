@@ -90,7 +90,7 @@ class CRM_Iats_Form_Refund extends CRM_Core_Form {
            foreach ($payments['values'] as $payment) {
              civicrm_api3('Payment', 'cancel', [
                'id' => $payment['id'],
-               'trxn_date' = date('Y-m-d H:i:s'),
+               'trxn_date' => date('Y-m-d H:i:s'),
              ]);
            }
          }

@@ -37,7 +37,7 @@
   <item>
     <path>civicrm/iats/refund</path>
     <page_callback>CRM_Iats_Form_Refund</page_callback>
-    <title>Refund</title>
+    <title>Refund Live Payment</title>
     <access_arguments>access CiviCRM</access_arguments>
   </item>
 </menu>
