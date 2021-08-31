@@ -82,7 +82,7 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
   $get = array(
       'next_sched_contribution_date' => ['<=' => $dtCurrentDayEnd],
       'payment_processor_id' => ['IN' => array_keys($paymentProcessors)],
-      'contribution_status_id' => ['IN' => ['In Progress']],
+      'contribution_status_id' => ['IN' => ['In Progress', 'Ongoing', 'Scheduled']],
       'payment_token_id' => ['>' => 0],
       'options' => ['limit' => 0],
       'return' => ['id', 'contact_id', 'amount', 'failure_count', 'payment_processor_id', 'next_sched_contribution_date',
@@ -240,6 +240,12 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     /* calculate the next collection date, based on the recieve date (note effect of catchup mode, above)  */
     $next_collection_date = date('Y-m-d H:i:s', strtotime('+'.$recurringContribution['frequency_interval'].' '.$recurringContribution['frequency_unit'], $receive_ts));
     $contribution_recur_set = array('version' => 3, 'id' => $contribution['contribution_recur_id'], 'next_sched_contribution_date' => $next_collection_date);
+    if (!empty($contribution['id']) && in_array(CRM_Core_DAO::getFieldValue('CRM_Contribute_DAO_Contribution', $contribution['id'], 'contribution_status_id'), [
+      CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Scheduled'),
+      CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Ongoing'),
+    ])) {
+      CRM_Core_DAO::setFieldValue('CRM_Contribute_DAO_Contribution', $contribution['id'], 'contribution_status_id', CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Pending'));
+    }
     $result = CRM_Iats_Transaction::process_contribution_payment($contribution, $paymentProcessor, $payment_token);
     // append result message to report if I'm going to mail out a failures
     // report
