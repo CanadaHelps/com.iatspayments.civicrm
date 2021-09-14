@@ -164,7 +164,7 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
       'contribution_recur_id'  => $contribution_recur_id,
       'invoice_id'       => $hash,
       'source'         => $source,
-      'contribution_status_id' => 'Pending', /* initialize as pending, so we can run completetransaction after taking the money */
+      'contribution_status_id' => ['IN' => ["Pending", "In Progress", "Scheduled"]], /* initialize as pending, so we can run completetransaction after taking the money */
       'currency'  => $recurringContribution['currency'],
       'payment_processor'   => $payment_processor_id,
       'is_test'        => $is_test, /* propagate the is_test value from the recurring record */
@@ -183,12 +183,13 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     // We'll need to pay attention later that we may or may not already have a contribution id.
     try {
       $pending_contribution = civicrm_api3('Contribution', 'getsingle', array(
-        'return' => array('id'),
+        'return' => array('id', 'contribution_status_id'),
         'trxn_id' => array('IS NULL' => 1),
         'contribution_recur_id' => $contribution_recur_id,
-        'contribution_status_id' => ['IN' => ["Pending", "In Progress", "Scheduled"]],
+        //'contribution_status_id' => ['IN' => ["Pending", "In Progress", "Scheduled"]],
+        'options' => ['limit' => 1, 'sort' => "id desc"],
       ));
-      if (!empty($pending_contribution['id'])) {
+      if (!empty($pending_contribution['id']) && in_array($pending_contribution['contribution_status'], ['Scheduled', 'Pending', 'In Progress'])) {
         $contribution['id'] = $pending_contribution['id'];
       }
     }
@@ -240,13 +241,11 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     /* calculate the next collection date, based on the recieve date (note effect of catchup mode, above)  */
     $next_collection_date = date('Y-m-d H:i:s', strtotime('+'.$recurringContribution['frequency_interval'].' '.$recurringContribution['frequency_unit'], $receive_ts));
     $contribution_recur_set = array('version' => 3, 'id' => $contribution['contribution_recur_id'], 'next_sched_contribution_date' => $next_collection_date);
-    if (!empty($contribution['id']) && in_array(CRM_Core_DAO::getFieldValue('CRM_Contribute_DAO_Contribution', $contribution['id'], 'contribution_status_id'), [
-      CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Scheduled'),
-      CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Ongoing'),
-    ])) {
+    if (!empty($contribution['id'])) {
       CRM_Core_DAO::setFieldValue('CRM_Contribute_DAO_Contribution', $contribution['id'], 'contribution_status_id', CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Pending'));
     }
     $result = CRM_Iats_Transaction::process_contribution_payment($contribution, $paymentProcessor, $payment_token);
+    
     // append result message to report if I'm going to mail out a failures
     // report
     if ($email_failure_report && !$result['result']['success']) {
