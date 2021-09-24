@@ -201,6 +201,18 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
       $contribution['skipLineItem'] = 1;
       $contribution['api.line_item.create'] = $contribution_template['line_items'];
     }
+    if (empty($contribution['id'])) {
+      foreach (['in_memoir', 'in_honour'] as $customFieldName) {
+        $customFieldID = civicrm_api3('customField', 'get', [
+          'custom_group_id' => "Contribution_Memoir",
+          'name' => $customFieldName,
+          'sequential' => 1,
+        ])['id'];
+        if ($customFieldID) {
+          $contribution['custom_' . $customFieldID] = 0;
+        }
+      }
+    }
     if (count($errors)) {
       ++$error_count;
       ++$counter;
