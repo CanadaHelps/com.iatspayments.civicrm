@@ -481,6 +481,13 @@ class CRM_Iats_iATSServiceRequest {
             'message' => 'ProcessACHEFTWithCustomerCode',
             'response' => 'ProcessACHEFTWithCustomerCodeResult',
           ),
+          'acheft_refund' => array(
+            'title' => 'Refund a specific ACH / EFT transaction',
+            'description' => $desc . 'ProcessACHEFTRefundWithTransactionId',
+            'method' => 'ProcessACHEFTRefundWithTransactionId',
+            'message' => 'ProcessACHEFTRefundWithTransactionId',
+            'response' => 'ProcessACHEFTRefundWithTransactionIdResult',
+          ),
         );
         break;
       case 'report':
