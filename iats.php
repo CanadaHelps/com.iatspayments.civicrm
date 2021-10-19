@@ -819,3 +819,82 @@ function iats_civicrm_buildForm_CRM_Contribute_Form_UpdateBilling(&$form) {
     $form->addElement('hidden', 'crid', $crid);
   }
 }
+
+function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
+  if ($objectName == 'Contribution') {
+    $contributionStatus = array_flip(CRM_Contribute_PseudoConstant::contributionStatus());
+    if ($objectRef->contribution_recur_id && $objectRef->contribution_status_id == $contributionStatus['Pending']) {
+      if (!empty($objectRef->id) && empty($objectRef->payment_instrument_id)) {
+        $objectRef->find(TRUE);
+      }
+      if (in_array($objectRef->payment_instrument_id, [
+          CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'EFT'),
+          CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'Credit Card')
+      ]) && empty($objectRef->trxn_id)) {
+        $recurObj = new CRM_Contribute_DAO_ContributionRecur();
+        $recurObj->id = $objectRef->contribution_recur_id;
+        $recurObj->find(TRUE);
+        if (strtotime("now") < strtotime($recurObj->start_date)) {
+          $objectRef->contribution_status_id = $contributionStatus['Scheduled'];
+          $objectRef->save();
+        }
+        elseif ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'EFT')) {
+          $objectRef->contribution_status_id = $contributionStatus['In Progress'];
+          $objectRef->save();
+        }
+      }
+    }
+    elseif ($objectRef->contribution_status_id == $contributionStatus['Pending']) {
+      if (!empty($objectRef->id) && empty($objectRef->payment_instrument_id)) {
+        $objectRef->find(TRUE);
+      }
+      if ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'EFT')) {
+        $objectRef->contribution_status_id = array_search('In Progress', CRM_Contribute_PseudoConstant::contributionStatus());
+        $objectRef->save();
+      }
+      if (!empty($objectRef->contribution_recur_id)) {
+        $recurObj = new CRM_Contribute_DAO_ContributionRecur();
+        $recurObj->id = $objectRef->contribution_recur_id;
+        $recurObj->find(TRUE);
+        $recurObj->contribution_status_id = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', 'Ongoing');
+        $recurObj->save();
+      }
+    }
+  }
+  if ($objectName == 'ContributionRecur') {
+    if (!empty($objectRef->id) && (empty($objectRef->payment_instrument_id) || empty($objectRef->contribution_status_id))) {
+      $objectRef->find(TRUE);
+    }
+    if (in_array($objectRef->payment_instrument_id, [
+        CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'EFT'),
+        CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'Credit Card')
+      ])) {
+      if ($objectRef->contribution_status_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', 'Pending') &&
+          strtotime("now") < strtotime($objectRef->start_date)
+      ) {
+        $objectRef->contribution_status_id = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', 'Scheduled');
+        $objectRef->save();
+      }
+      if ($objectRef->contribution_status_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', 'In Progress')) {
+        $status = (strtotime("now") < strtotime($objectRef->start_date)) ? 'Scheduled' : 'Ongoing';
+        $objectRef->contribution_status_id = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', $status);
+        $objectRef->save();
+      }
+      if ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'EFT') &&
+        $objectRef->contribution_status_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', 'Scheduled') &&
+        (strtotime("now") > strtotime($objectRef->start_date))
+      ) {
+          $count = CRM_Core_DAO::singleValueQuery(sprintf("
+            SELECT count(id)
+            FROM civicrm_contribution
+            WHERE contribution_recur_id = %s AND contribution_status_id = %s",
+            $objectRef->id,
+            array_search('Completed', CRM_Contribute_PseudoConstant::contributionStatus())
+          ));
+          $status = $count > 0 ? 'Ongoing' : 'In Progress';
+          $objectRef->contribution_status_id = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', $status);
+          $objectRef->save();
+      }
+    }
+  }
+}
