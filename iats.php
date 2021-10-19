@@ -848,10 +848,6 @@ function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
       if (!empty($objectRef->id) && empty($objectRef->payment_instrument_id)) {
         $objectRef->find(TRUE);
       }
-      if ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'EFT')) {
-        $objectRef->contribution_status_id = array_search('In Progress', CRM_Contribute_PseudoConstant::contributionStatus());
-        $objectRef->save();
-      }
       if (!empty($objectRef->contribution_recur_id)) {
         $recurObj = new CRM_Contribute_DAO_ContributionRecur();
         $recurObj->id = $objectRef->contribution_recur_id;
