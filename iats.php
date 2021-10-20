@@ -873,6 +873,16 @@ function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
       }
       if ($objectRef->contribution_status_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', 'In Progress')) {
         $status = (strtotime("now") < strtotime($objectRef->start_date)) ? 'Scheduled' : 'Ongoing';
+        if ($status == 'Ongoing') {
+          $count = CRM_Core_DAO::singleValueQuery(sprintf("
+            SELECT count(id)
+            FROM civicrm_contribution
+            WHERE contribution_recur_id = %s AND contribution_status_id = %s",
+            $objectRef->id,
+            array_search('Completed', CRM_Contribute_PseudoConstant::contributionStatus())
+          ));
+          $status = $count > 0 ? $status : 'In Progress';
+        }
         $objectRef->contribution_status_id = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', $status);
         $objectRef->save();
       }
