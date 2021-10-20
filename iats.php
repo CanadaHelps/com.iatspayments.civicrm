@@ -838,17 +838,13 @@ function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
           $objectRef->contribution_status_id = $contributionStatus['Scheduled'];
           $objectRef->save();
         }
-        elseif ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'EFT')) {
-          $objectRef->contribution_status_id = $contributionStatus['In Progress'];
-          $objectRef->save();
-        }
       }
     }
     elseif ($objectRef->contribution_status_id == $contributionStatus['Pending']) {
       if (!empty($objectRef->id) && empty($objectRef->payment_instrument_id)) {
         $objectRef->find(TRUE);
       }
-      if (!empty($objectRef->contribution_recur_id)) {
+      if (!empty($objectRef->contribution_recur_id) && ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'Credit Card'))) {
         $recurObj = new CRM_Contribute_DAO_ContributionRecur();
         $recurObj->id = $objectRef->contribution_recur_id;
         $recurObj->find(TRUE);
