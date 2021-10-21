@@ -184,9 +184,7 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     try {
       $pending_contribution = civicrm_api3('Contribution', 'getsingle', array(
         'return' => array('id', 'contribution_status_id'),
-        'trxn_id' => array('IS NULL' => 1),
         'contribution_recur_id' => $contribution_recur_id,
-        //'contribution_status_id' => ['IN' => ["Pending", "In Progress", "Scheduled"]],
         'options' => ['limit' => 1, 'sort' => "id desc"],
       ));
       if (!empty($pending_contribution['id']) && in_array($pending_contribution['contribution_status'], ['Scheduled', 'Pending', 'In Progress'])) {
