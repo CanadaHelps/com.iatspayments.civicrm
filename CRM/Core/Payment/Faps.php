@@ -487,27 +487,57 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       throw new Exception($alert);
     }
     $contribution_recur = civicrm_api3('ContributionRecur', 'getsingle', ['id' => $crid]);
-    $payment_token = $result = civicrm_api3('PaymentToken', 'getsingle', ['id' => $contribution_recur['payment_token_id']]);
+    $payment_token = civicrm_api3('PaymentToken', 'getsingle', ['id' => $contribution_recur['payment_token_id']]);
     $params['token'] = $payment_token['token'];
-    // construct the array of data that I'll submit to the iATS Payments server.
-    $options = [
-      'action' => 'VaultUpdateCCRecord',
-    ];
-    $vault_request = new CRM_Iats_FapsRequest($options);
-
-    $request = $this->convertParams($params, $options['action']);
+    $params['defaultAccount'] = true;
     $result = CRM_Iats_FapsRequest::credentials($contribution_recur['payment_processor_id']);
     $credentials = [
       'merchantKey' => $result['signature'],
       'processorId' => $result['user_name'],
     ];
+    // Generate token from creditcardcryptogram
+    $options = array(
+      'action' => 'GenerateTokenFromCreditCard',
+    );
+    $token_request = new CRM_Iats_FapsRequest($options);
+    $request = $this->convertParams($params, $options['action']);
+    // Make the request.
+    // CRM_Core_Error::debug_var('token request', $request);
+    $result = $token_request->request($credentials, $request);
+    // CRM_Core_Error::debug_var('token result', $result);
+    // unset the cryptogram request values, we can't use the cryptogram again and don't want to return it anyway.
+    unset($request['creditCardCryptogram']);
+    unset($token_request);
+    if (!empty($result['isSuccess'])) {
+      // some of the result[data] is not useful, we're assuming it's not harmful to include in future requests here.
+      $params = array_merge($params, $result['data']);
+    }
+    else {
+      return self::error($result);
+    }
+
+    // construct the array of data that I'll submit to the iATS Payments server.
+    $options = [
+      'action' => 'VaultCreateCCRecord',
+    ];
+    $vault_request = new CRM_Iats_FapsRequest($options);
+
+    $request = $this->convertParams($params, $options['action']);
 
     // Make the soap request.
     try {
       $response = $vault_request->request($credentials, $request);
       // note: don't log this to the iats_response table.
       // CRM_Core_Error::debug_var('faps result', $response);
-      if (empty($response['isError']) && !empty($response['data']['recordsUpdated'])) {
+      if (empty($response['isError'])) {
+        if (!empty($response['data']['id'])) {
+          // We update the payment token.
+          $newToken = $request['vaultKey'] . ":" . $response['data']['id'];
+          civicrm_api3('PaymentToken', 'create', [
+            'id' => $contribution_recur['payment_token_id'],
+            'token' => $newToken,
+          ]);
+        }
         return TRUE;
       }
       else {
@@ -548,14 +578,18 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
         'billing_last_name',
       ],
     );
-    if ($method == 'VaultUpdateCCRecord') {
+    if ($method == 'VaultCreateCCRecord') {
       $convert = array_merge($convert, [
-        'cardtype' => 'credit_card_type',
+        'cardType' => 'cardtype',
+        'creditCardToken' => 'creditCardToken',
+        'cardExpMonth' => 'cardExpMonth',
+        'cardExpYear' => 'cardExpYear',
         'ownerName' => [
           'first_name',
           'middle_name',
           'last_name',
         ],
+        'defaultAccount' => 'defaultAccount',
         'vaultKey' => 'token',
       ]);
     }
@@ -616,9 +650,11 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
           ];
           $request[$r] = $mop[$params[$p]];
         }
+        elseif($r == 'defaultAccount') {
+          $request[$r] = true;
+        }
         elseif ($r == 'vaultKey') {
           $matches = explode(':', $params[$p]);
-          $request['id'] = $matches[1];
           $request[$r] = $matches[0];
         }
         else {
