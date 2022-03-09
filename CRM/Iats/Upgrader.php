@@ -216,7 +216,7 @@ class CRM_Iats_Upgrader extends CRM_Iats_Upgrader_Base {
       AND pp.class_name = 'Payment_Faps'");
     while ($tokens->fetch()) {
       $paymentprocessor = \Civi\Payment\System::singleton()->getById($tokens->payment_processor_id);
-      $paymentprocssor->updateTokenExpiry(explode(':', $tokens->token)[0], $tokens->token_id);
+      $paymentprocessor->updateTokenExpiry(explode(':', $tokens->token)[0], $tokens->token_id);
     }
     return TRUE;
   }

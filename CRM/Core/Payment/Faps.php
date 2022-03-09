@@ -810,7 +810,7 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
           ]);
        }
        catch (Exception $e) {
-         \Civi::log()->debug('Failure to update payment token with expiry date', ['paymentTokenId' => $token_result['id'], 'card' => $card]);
+         \Civi::log()->debug('Failure to update payment token with expiry date', ['paymentTokenId' => $token_id, 'card' => $card]);
        }
      }
   }
