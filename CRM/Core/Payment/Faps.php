@@ -380,26 +380,7 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
           // before taking the payment.
           $this->updateRecurring($params);
           // Query the vault to get the expiry date of the card that we have just used and store it in the payment token table for use in reports.
-          $requestOptions = array(
-            'action' => 'VaultQueryVault',
-            'test' => $this->is_test,
-          );
-          $vault_request = new CRM_Iats_FapsRequest($requestOptions);
-          $requestResult = $vault_request->request($credentials, [
-            'queryVaultKey' => $vault_key,
-          ]);
-          if (!empty($requestResult['isSuccess'])) {
-            $card = $requestResult['data']['VaultContainers'][0]['vaultCreditCards'][0];
-            try {
-              civicrm_api3('PaymentToken', 'create', [
-                'id' => $token_result['id'],
-                'expiry_date' => date('Y-m-t H:i:s', strtotime($card['expirationMonth'] . '/01/' . $card['expirationYear'])),
-              ]);
-            }
-            catch (Exception $e) {
-              \Civi::log()->debug('Failure to update payment token with expiry date', ['paymentTokenId' => $token_result['id'], 'card' => $card]);
-            }
-          }
+          $this->updateTokenExpiry($vault_key, $token_result['id']);
         }
       }
       else {
@@ -807,5 +788,31 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
     return false;
   }
 
+  public function updateTokenExpiry($vault_key, $token_id) {
+    $credentials = array(
+      'merchantKey' => $this->_paymentProcessor['signature'],
+      'processorId' => $this->_paymentProcessor['user_name']
+    );
+    $requestOptions = array(
+       'action' => 'VaultQueryVault',
+        'test' => $this->is_test,
+     );
+     $vault_request = new CRM_Iats_FapsRequest($requestOptions);
+     $requestResult = $vault_request->request($credentials, [
+       'queryVaultKey' => $vault_key,
+     ]);
+     if (!empty($requestResult['isSuccess'])) {
+       $card = $requestResult['data']['VaultContainers'][0]['vaultCreditCards'][0];
+       try {
+         civicrm_api3('PaymentToken', 'create', [
+            'id' => $token_id,
+             'expiry_date' => date('Y-m-t H:i:s', strtotime($card['expirationMonth'] . '/01/' . $card['expirationYear'])),
+          ]);
+       }
+       catch (Exception $e) {
+         \Civi::log()->debug('Failure to update payment token with expiry date', ['paymentTokenId' => $token_result['id'], 'card' => $card]);
+       }
+     }
+  }
 
 }

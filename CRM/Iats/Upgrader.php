@@ -202,6 +202,24 @@ class CRM_Iats_Upgrader extends CRM_Iats_Upgrader_Base {
     return TRUE;
   }
 
+  /**
+   * Populate expiry dates for FAPS recurring payment processors
+   *
+   * @return bool
+   */
+  public function upgrade_1_7_004(): bool {
+    $this->ctx->log->info('Applying update 1_7_004 populating expiry dates for FAPS Recurring contribtuions');
+    $tokens = CRM_Core_DAO::executeQuery("SELECT pt.id as token_id, pt.token, pt.payment_processor_id
+      FROM civicrm_payment_token pt
+      INNER JOIN civicrm_payment_processor pp ON pp.id = pt.payment_processor_id
+      WHERE pt.expiry_date IS NULL
+      AND pp.class_name = 'Payment_Faps'");
+    while ($tokens->fetch()) {
+      $paymentprocessor = \Civi\Payment\System::singleton()->getById($tokens->payment_processor_id);
+      $paymentprocssor->updateTokenExpiry(explode(':', $tokens->token)[0], $tokens->token_id);
+    }
+    return TRUE;
+  }
 
   /**
    * Example: Run an external SQL script
