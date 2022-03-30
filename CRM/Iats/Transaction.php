@@ -1,4 +1,5 @@
 <?php
+use CRM_Canadahelps_ExtensionUtils as E;
 /**
  * @file IATS Service transaction utility class
  *
@@ -90,6 +91,7 @@ class CRM_Iats_Transaction {
     $auth_code = $payment_result['auth_code'];
     $auth_response = empty($payment_result['auth_response']) ? '' : $payment_result['auth_response'];
     $trxn_id = empty($payment_result['trxn_id']) ? '' : $payment_result['trxn_id'];
+
     // Handle any case of a failure of some kind, either the card failed, or the system failed.
     if (!$success) {
       $error_message = $payment_result['message'];
@@ -141,11 +143,16 @@ class CRM_Iats_Transaction {
         // If repeattransaction succeded.
         // First restore/add various fields that the repeattransaction api may overwrite or ignore.
         // TODO - fix this in core to allow these to be set above.
+        // Empty Custom Receipt Number for recurring contributions
+        $receiptNumberCustomID = E::getCustomFieldID('Receipt_Number');
+        $isReceiptedCustomID = E::getCustomFieldID('Is_Receipted_');
         civicrm_api3('contribution', 'create', array('id' => $contribution['id'], 
           'invoice_id' => $contribution['invoice_id'],
           'source' => $contribution['source'],
           'receive_date' => $contribution['receive_date'],
           'payment_instrument_id' => $contribution['payment_instrument_id'],
+          $receiptNumberCustomID => ['IS NULL' => 1],
+          $isReceiptedCustomID => 0,
           // '' => $contribution['receive_date'],
         ));
         // Save my status in the contribution array that was passed in.
