@@ -844,7 +844,10 @@ function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
       if (!empty($objectRef->id) && empty($objectRef->payment_instrument_id)) {
         $objectRef->find(TRUE);
       }
-      if (!empty($objectRef->contribution_recur_id) && ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'Credit Card'))) {
+      if (!empty($objectRef->contribution_recur_id) &&
+        ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'Credit Card')) &&
+        (!empty($objectRef->payment_processor_id) && in_array(civicrm_api3('PaymentProcessor', 'getsingle', ['id' => $objectRef->payment_processor_id])['class_name'], ['Payment_Faps', 'Payment_iATSServiceACHEFT']))
+      ) {
         $recurObj = new CRM_Contribute_DAO_ContributionRecur();
         $recurObj->id = $objectRef->contribution_recur_id;
         $recurObj->find(TRUE);
