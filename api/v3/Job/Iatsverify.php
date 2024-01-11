@@ -68,6 +68,11 @@ function _civicrm_api3_job_iatsverify_spec(&$spec) {
  */
 function civicrm_api3_job_iatsverify($params) {
 
+  // Initiate the Logger
+  $csvFilePath = CRM_Utils_Log_RecurringPayment::getCSVFilePath();
+  $logger = new CRM_Utils_Log_RecurringPayment($csvFilePath);
+  $logData = [];
+
   $settings = Civi::settings()->get('iats_settings');
   $receipt_recurring = $settings['receipt_recurring'];
   define('IATS_VERIFY_DAYS', 30);
@@ -140,6 +145,19 @@ function civicrm_api3_job_iatsverify($params) {
         }
       }
       if (!empty($journal_entry)) {
+        // Add the data to be logged
+        $logData = [
+          'contactID' => $contribution['contact_id'],
+          'contributionID' => $contribution['contribution_id'],
+          'amount' => $journal_entry['amt'],
+          'contributionRecurID' => $contribution['contribution_recur_id'],
+          'receiveDate' => $contribution['receive_date'],
+          'trxnID' => $contribution['trxn_id'],
+          'invoiceID' => $contribution['invoice_id'],
+          'paymentProcessor' => $journal_entry['tntyp'],
+          'response' => $journal_entry['auth_result']
+        ];
+
         // CRM_Core_Error::debug_var('Matching journal entry', $journal_entry);
         /* found a matching journal entry with a transaction id, we can approve or fail it */
         $is_recur = empty($contribution['contribution_recur_id']) ? FALSE : TRUE;
@@ -179,19 +197,22 @@ function civicrm_api3_job_iatsverify($params) {
               CRM_Core_Error::debug_var('Failed to complete transaction with', $complete);
               $error_log[] = 'Failed to complete transaction: ' . $e->getMessage() . "\n";
             }
-
             // Restore source field and trxn_id that completetransaction overwrites
             civicrm_api3('contribution', 'create', array(
               'id' => $contribution['id'],
               'source' => $contribution['source'],
               'trxn_id' => $trxn_id,
             ));
+            $logData['status'] = 'completed';
+            $logger->addStatus($logData);
             break;
           case 4: // failed, just update the contribution status.
             civicrm_api3('Contribution', 'create', array(
               'id' => $contribution['id'],
               'contribution_status_id' => $contribution_status_id,
             ));
+            $logData['status'] = 'failed';
+            $logger->addStatus($logData);
             break;
         }
         // Always log these requests in my cutom civicrm table for auditing type purposes

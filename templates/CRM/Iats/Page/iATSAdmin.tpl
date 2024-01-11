@@ -56,3 +56,9 @@
     </tr>
   {/foreach}
 </table>
+
+<form method="GET" action="/civicrm/download/iatsjournal">
+  <fieldset><legend>Download Recurring Journal</legend></fieldset>
+  <div> <input type="submit" value="Download" class='crm-button-primary'> </div>
+  <div class="description">Download the CSV file for all the iATS recurring contributions log.</div>
+</form>
