@@ -57,8 +57,22 @@
   {/foreach}
 </table>
 
-<form method="GET" action="/civicrm/download/iatsjournal">
-  <fieldset><legend>Download Recurring Journal</legend></fieldset>
-  <div> <input type="submit" value="Download" class='crm-button-primary'> </div>
-  <div class="description">Download the CSV file for all the iATS recurring contributions log.</div>
-</form>
+<table class="iats-download">
+  <tr>
+    <td>
+      <form method="GET" action="/civicrm/download/iatsjournal">
+        <fieldset><legend>Download Journal (Logs)</legend></fieldset>
+        <input type="submit" value="Download" class='crm-button-primary'>
+        <div class="description">Download the CSV file for all the iATS recurring contributions log.</div>
+      </form>
+    </td>
+    <td>
+      <form method="GET" action="/civicrm/download/iatsjournal">
+        <fieldset><legend>Download Journal Detailed (for developers)</legend></fieldset>
+        <input type="hidden" name="file_type" value="dev" />
+        <input type="submit" value="Download" class='crm-button-primary'>
+        <div class="description">This file contains all the request and response log data.</div>
+      </form>
+    </td>
+  </tr>
+</table>

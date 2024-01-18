@@ -203,6 +203,10 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
    */
   public function doPayment(&$params, $component = 'contribute') {
 
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_RecurringPayment('dev');
+    $logData = [];
+
     if (!$this->_profile) {
       return self::error('Unexpected error, missing profile');
     }
@@ -219,11 +223,25 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       'password'  => $this->_paymentProcessor['password'],
     );
     // Make the soap request.
+    $logData = [
+      'invoice' => $request['invoiceNum'],
+      'amount' => $request['total'],
+      'paymentMethod' => 'ACH_EFT',
+      'requestData' => json_encode($request),
+    ];
     $response = $iats->request($credentials, $request);
     if (!$isRecur) {
       // Process the soap response into a readable result, logging any transaction.
       $result = $iats->result($response);
       if ($result['status']) {
+        //Add Data to the internal log
+        $logData['contributionId'] = $params['contributionID'] ?? '';
+        $logData['status'] = 'Success';
+        $logData['statusCode'] = $result['auth_result'] ?? '';
+        $logData['remoteId'] = $result['remote_id'] ?? '';
+        $logData['isRecurring'] = '0';
+        $logger->addLog($logData);
+
         $params['payment_status_id'] = 2;
         $params['trxn_id'] = trim($result['remote_id']) . ':' . time();
         // Core assumes that a pending result will have no transaction id, but we have a useful one.
@@ -241,6 +259,14 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
         return $params;
       }
       else {
+        // Log the failed Message
+        $logData['contributionId'] = isset($params['contributionID']) ?? '';
+        $logData['status'] = 'Failed';
+        $logData['statusCode'] = isset($result['auth_result']) ?? '';
+        $logData['remoteId'] = isset($result['remote_id']) ?? '';
+        $logData['isRecurring'] = '0';
+        $logger->addLog($logData, $result['reasonMessage']);
+
         return self::error($result['reasonMessage']);
       }
     }
@@ -248,9 +274,24 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       // Save the customer info in to the CiviCRM core payment_token table
       $customer = $iats->result($response);
       if (!$customer['status']) {
+        //Add Data to the internal log
+        $logData['contributionId'] = $params['contributionID'] ?? '';
+        $logData['status'] = 'Failed';
+        $logData['statusCode'] = $customer['AUTHORIZATIONRESULT'] ?? '';
+        $logData['remoteId'] = $customer['CUSTOMERCODE'] ?? '';
+        $logData['isRecurring'] = '1';
+        $logger->addLog($logData, $customer['reasonMessage']);
         return self::error($customer['reasonMessage']);
       }
       else {
+        //Add Data to the internal log
+        $logData['contributionId'] = $params['contributionID'] ?? '';
+        $logData['status'] = 'Success';
+        $logData['statusCode'] = $customer['AUTHORIZATIONRESULT'] ?? '';
+        $logData['remoteId'] = $customer['CUSTOMERCODE'] ?? '';
+        $logData['isRecurring'] = '1';
+        $logger->addLog($logData);
+
         $processresult = $response->PROCESSRESULT;
         $customer_code = (string) $processresult->CUSTOMERCODE;
         $email = '';

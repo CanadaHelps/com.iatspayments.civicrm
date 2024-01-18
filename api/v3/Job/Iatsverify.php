@@ -69,8 +69,7 @@ function _civicrm_api3_job_iatsverify_spec(&$spec) {
 function civicrm_api3_job_iatsverify($params) {
 
   // Initiate the Logger
-  $csvFilePath = CRM_Utils_Log_RecurringPayment::getCSVFilePath();
-  $logger = new CRM_Utils_Log_RecurringPayment($csvFilePath);
+  $logger = new CRM_Utils_Log_RecurringPayment();
   $logData = [];
 
   $settings = Civi::settings()->get('iats_settings');
@@ -204,7 +203,7 @@ function civicrm_api3_job_iatsverify($params) {
               'trxn_id' => $trxn_id,
             ));
             $logData['status'] = 'completed';
-            $logger->addStatus($logData);
+            $logger->addLog($logData);
             break;
           case 4: // failed, just update the contribution status.
             civicrm_api3('Contribution', 'create', array(
@@ -212,7 +211,7 @@ function civicrm_api3_job_iatsverify($params) {
               'contribution_status_id' => $contribution_status_id,
             ));
             $logData['status'] = 'failed';
-            $logger->addStatus($logData);
+            $logger->addLog($logData);
             break;
         }
         // Always log these requests in my cutom civicrm table for auditing type purposes
