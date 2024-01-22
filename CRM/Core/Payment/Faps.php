@@ -420,13 +420,16 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
     $requestLog = $request;
 
     // Unset the confidential information from the request
-    unset($requestLog['cardNumber']);
-    unset($requestLog['cardExpYear']);
-    unset($requestLog['cardExpMonth']);
-    unset($requestLog['cVV']);
-    unset($requestLog['ownerCity']);
-    unset($requestLog['ownerState']);
-    unset($requestLog['ownerStreet']);
+    $confidentialData = ['cardNumber', 'cardExpYear', 'cardExpMonth', 'cVV', 'ownerCity', 'ownerState', 'ownerStreet'];
+    foreach ($confidentialData as $confV) {
+      if(isset($requestLog[$confV])) {
+        unset($requestLog[$confV]);
+      }
+    }
+    if($vault_id) {
+      unset($requestLog['vaultKey']);
+      unset($requestLog['vaultId']);
+    }
 
     $logData = [
       'orderId' => $request['orderId'],
@@ -451,7 +454,7 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       $logData['contributionId'] = $params['contributionID'] ?? '';
       $logData['status'] = 'Success';
       $logData['statusCode'] = $result['data']['authResponse'] ?? '';
-      $logData['remoteId'] = $result['referenceNumber'] ?? '';
+      $logData['remoteId'] = $params['trxn_id'] ?? '';
       $logData['isRecurring'] = $isRecur ? $isRecur : 0;
       $logger->addLog($logData);
 
@@ -462,9 +465,9 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       $logData['contributionId'] = $params['contributionID'] ?? '';
       $logData['status'] = 'Failed';
       $logData['statusCode'] = $result['data']['authResponse'] ?? '';
-      $logData['remoteId'] = $result['referenceNumber'] ?? '';
+      $logData['remoteId'] = $result['data']['referenceNumber'] ?? '';
       $logData['isRecurring'] =  $isRecur ? $isRecur : 0;
-      $logger->addLog($logData);
+      $logger->addLog($logData, $result['errorMessages']);
 
       return self::error($result);
     }

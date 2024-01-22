@@ -23,7 +23,11 @@ class CRM_Utils_Log_RecurringPayment {
 
             // Any log Message if present
             if(!empty($logMessage)) {
-                $logData['message'] = $logMessage;
+                if(is_array($logMessage)) {
+                    $logData['message'] = json_encode($logMessage);
+                } else {
+                    $logData['message'] = $logMessage;
+                }
             }
 
             fputcsv($file, array_values($logData));
