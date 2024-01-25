@@ -267,6 +267,11 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
    * doesn't offer recurring contributions.
    */
   public function doPayment(&$params, $component = 'contribute') {
+
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_RecurringPayment('dev');
+    $logData = [];
+
     // CRM_Core_Error::debug_var('doPayment params', $params);
 
     // Check for valid currency [todo: we have C$ support, but how do we check,
@@ -410,6 +415,29 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       $request['vaultKey'] = $vault_key;
       $request['vaultId'] = $vault_id;
     }
+
+    // Log the data to dev Journal
+    $requestLog = $request;
+
+    // Unset the confidential information from the request
+    $confidentialData = ['cardNumber', 'cardExpYear', 'cardExpMonth', 'cVV', 'ownerCity', 'ownerState', 'ownerStreet'];
+    foreach ($confidentialData as $confV) {
+      if(isset($requestLog[$confV])) {
+        unset($requestLog[$confV]);
+      }
+    }
+    if($vault_id) {
+      unset($requestLog['vaultKey']);
+      unset($requestLog['vaultId']);
+    }
+
+    $logData = [
+      'orderId' => $request['orderId'],
+      'amount' => $request['transactionAmount'],
+      'paymentMethod' => 'Credit Card (1st Pay)',
+      'requestData' => json_encode($requestLog),
+    ];
+
     // Make the request.
     // CRM_Core_Error::debug_var('payment request', $request);
     $result = $payment_request->request($credentials, $request);
@@ -421,9 +449,26 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       // For versions >= 4.6.6, the proper key.
       $params['payment_status_id'] = 1;
       $params['trxn_id'] = trim($result['data']['referenceNumber']).':'.time();
+
+      // Log the Response Data
+      $logData['contributionId'] = $params['contributionID'] ?? '';
+      $logData['status'] = 'Success';
+      $logData['statusCode'] = $result['data']['authResponse'] ?? '';
+      $logData['remoteId'] = $params['trxn_id'] ?? '';
+      $logData['isRecurring'] = $isRecur ? $isRecur : 0;
+      $logger->addLog($logData);
+
       return $params;
     }
     else {
+      // Log the Response Data
+      $logData['contributionId'] = $params['contributionID'] ?? '';
+      $logData['status'] = 'Failed';
+      $logData['statusCode'] = $result['data']['authResponse'] ?? '';
+      $logData['remoteId'] = $result['data']['referenceNumber'] ?? '';
+      $logData['isRecurring'] =  $isRecur ? $isRecur : 0;
+      $logger->addLog($logData, $result['errorMessages']);
+
       return self::error($result);
     }
   }

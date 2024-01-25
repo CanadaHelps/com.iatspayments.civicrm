@@ -54,6 +54,11 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
   if (!$lock->acquire()) {
     return civicrm_api3_create_success(ts('Failed to acquire lock. No contribution records were processed.'));
   }
+
+  // Initiate the dev Logger
+  $logger = new CRM_Utils_Log_RecurringPayment('dev');
+  $logData = [];
+
   // Restrict this method of recurring contribution processing to only iATS (Faps + Legacy) active payment processors.
   // TODO: exclude test processors?
   $fapsProcessors = _iats_filter_payment_processors('Faps%', array(), array('active' => 1));
@@ -242,6 +247,15 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     if (!empty($contribution['id'])) {
       CRM_Core_DAO::setFieldValue('CRM_Contribute_DAO_Contribution', $contribution['id'], 'contribution_status_id', CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Pending'));
     }
+
+    // Log the request
+    $logData = [
+      'orderId' => $contribution['invoice_id'],
+      'amount' => $contribution['total_amount'],
+      'paymentMethod' => ($paymentProcessor['class_name'] == 'Payment_Faps') ?  'Credit Card (1st Pay)' : 'ACH_EFT',
+      'requestData' => json_encode($contribution),
+    ];
+
     $result = CRM_Iats_Transaction::process_contribution_payment($contribution, $paymentProcessor, $payment_token);
     
     // append result message to report if I'm going to mail out a failures
@@ -250,6 +264,21 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
       $failure_report_text .= "\n".$result['message'];
     }
     $output[] = $result['message'];
+
+    // Log the Response Data
+    // CHeck for auth response as key is different for credit card and ACH
+    if($paymentProcessor['class_name'] == 'Payment_Faps') {
+      $authCode = $result['result']['auth_response'] ?? '';
+    } else {
+      $authCode = $result['result']['auth_code'] ?? '';
+    }
+    $logData['contributionId'] = $contribution['id'] ?? '';
+    $logData['status'] = $result['result']['success'] ? 'Success' : 'Failed';
+    $logData['statusCode'] = $authCode;
+    $logData['remoteId'] = $result['result']['trxn_id'] ?? '';
+    $logData['isRecurring'] = 1;
+    $logger->addLog($logData, $result['result']['message']);
+
     /* by default, just set the failure count back to 0 */
     $contribution_recur_set = array('version' => 3, 'id' => $contribution['contribution_recur_id'], 'failure_count' => '0', 'next_sched_contribution_date' => $next_collection_date);
     /* special handling for failures: try again at next opportunity if we haven't failed too often */
