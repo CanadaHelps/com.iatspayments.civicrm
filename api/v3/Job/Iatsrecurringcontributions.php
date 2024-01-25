@@ -56,8 +56,7 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
   }
 
   // Initiate the dev Logger
-  $logger = new CRM_Utils_Log_RecurringPayment('dev');
-  $logData = [];
+  $logger = new CRM_Utils_Log_IatsPayment('dev');
 
   // Restrict this method of recurring contribution processing to only iATS (Faps + Legacy) active payment processors.
   // TODO: exclude test processors?
@@ -248,13 +247,13 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
       CRM_Core_DAO::setFieldValue('CRM_Contribute_DAO_Contribution', $contribution['id'], 'contribution_status_id', CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Pending'));
     }
 
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
+
     // Log the request
-    $logData = [
-      'orderId' => $contribution['invoice_id'],
-      'amount' => $contribution['total_amount'],
-      'paymentMethod' => ($paymentProcessor['class_name'] == 'Payment_Faps') ?  'Credit Card (1st Pay)' : 'ACH_EFT',
-      'requestData' => json_encode($contribution),
-    ];
+    $paymentMethodForLog = ($paymentProcessor['class_name'] == 'Payment_Faps') ?  'Credit Card (1st Pay)' : 'ACH_EFT';
+    $logger->setPaymentMethod($paymentMethodForLog);
+    $logData = $logger->buildRequestLog($contribution, TRUE);
 
     $result = CRM_Iats_Transaction::process_contribution_payment($contribution, $paymentProcessor, $payment_token);
     
@@ -266,17 +265,8 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     $output[] = $result['message'];
 
     // Log the Response Data
-    // CHeck for auth response as key is different for credit card and ACH
-    if($paymentProcessor['class_name'] == 'Payment_Faps') {
-      $authCode = $result['result']['auth_response'] ?? '';
-    } else {
-      $authCode = $result['result']['auth_code'] ?? '';
-    }
-    $logData['contributionId'] = $contribution['id'] ?? '';
-    $logData['status'] = $result['result']['success'] ? 'Success' : 'Failed';
-    $logData['statusCode'] = $authCode;
-    $logData['remoteId'] = $result['result']['trxn_id'] ?? '';
-    $logData['isRecurring'] = 1;
+    $resultForLog = $result['result']['success'] ? 'Success' : 'Failed';
+    $logData = $logger->buildResponseLog($logData, $resultForLog, $contribution, $result, TRUE, TRUE);
     $logger->addLog($logData, $result['result']['message']);
 
     /* by default, just set the failure count back to 0 */

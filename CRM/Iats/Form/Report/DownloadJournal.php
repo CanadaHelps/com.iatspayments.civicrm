@@ -18,9 +18,9 @@ class CRM_Iats_Form_Report_DownloadJournal extends CRM_Report_Form {
 
     protected function download() {
         if($this->fileType) {
-            $csvFilePath = CRM_Utils_Log_RecurringPayment::getCSVFilePath('dev');
+            $csvFilePath = CRM_Utils_Log_IatsPayment::getCSVFilePath('dev');
         } else {
-            $csvFilePath = CRM_Utils_Log_RecurringPayment::getCSVFilePath();
+            $csvFilePath = CRM_Utils_Log_IatsPayment::getCSVFilePath();
         }
         if (file_exists($csvFilePath)) {
             if(filesize($csvFilePath) == 0) {

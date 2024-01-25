@@ -203,10 +203,6 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
    */
   public function doPayment(&$params, $component = 'contribute') {
 
-    // Initiate the dev Logger
-    $logger = new CRM_Utils_Log_RecurringPayment('dev');
-    $logData = [];
-
     if (!$this->_profile) {
       return self::error('Unexpected error, missing profile');
     }
@@ -222,24 +218,22 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       'agentCode' => $this->_paymentProcessor['user_name'],
       'password'  => $this->_paymentProcessor['password'],
     );
+
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
+
+    // Log the Request
+    $logger->setPaymentMethod('ACH_EFT');
+    $logData = $logger->buildRequestLog($request);
+
     // Make the soap request.
-    $logData = [
-      'invoice' => $request['invoiceNum'],
-      'amount' => $request['total'],
-      'paymentMethod' => 'ACH_EFT',
-      'requestData' => json_encode($request),
-    ];
     $response = $iats->request($credentials, $request);
     if (!$isRecur) {
       // Process the soap response into a readable result, logging any transaction.
       $result = $iats->result($response);
       if ($result['status']) {
-        //Add Data to the internal log
-        $logData['contributionId'] = $params['contributionID'] ?? '';
-        $logData['status'] = 'Success';
-        $logData['statusCode'] = $result['auth_result'] ?? '';
-        $logData['remoteId'] = $result['remote_id'] ?? '';
-        $logData['isRecurring'] = '0';
+        //Add the response data to the internal log
+        $logData = $logger->buildResponseLog($logData, 'Success', $params, $result, FALSE);
         $logger->addLog($logData);
 
         $params['payment_status_id'] = 2;
@@ -259,12 +253,8 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
         return $params;
       }
       else {
-        // Log the failed Message
-        $logData['contributionId'] = isset($params['contributionID']) ?? '';
-        $logData['status'] = 'Failed';
-        $logData['statusCode'] = isset($result['auth_result']) ?? '';
-        $logData['remoteId'] = isset($result['remote_id']) ?? '';
-        $logData['isRecurring'] = '0';
+        //Add the response data to the internal log
+        $logData = $logger->buildResponseLog($logData, 'Failed', $params, $result, FALSE);
         $logger->addLog($logData, $result['reasonMessage']);
 
         return self::error($result['reasonMessage']);
@@ -275,21 +265,13 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       $customer = $iats->result($response);
       if (!$customer['status']) {
         //Add Data to the internal log
-        $logData['contributionId'] = $params['contributionID'] ?? '';
-        $logData['status'] = 'Failed';
-        $logData['statusCode'] = $customer['AUTHORIZATIONRESULT'] ?? '';
-        $logData['remoteId'] = $customer['CUSTOMERCODE'] ?? '';
-        $logData['isRecurring'] = '1';
+        $logData = $logger->buildResponseLog($logData, 'Failed', $params, $customer, TRUE);
         $logger->addLog($logData, $customer['reasonMessage']);
         return self::error($customer['reasonMessage']);
       }
       else {
         //Add Data to the internal log
-        $logData['contributionId'] = $params['contributionID'] ?? '';
-        $logData['status'] = 'Success';
-        $logData['statusCode'] = $customer['AUTHORIZATIONRESULT'] ?? '';
-        $logData['remoteId'] = $customer['CUSTOMERCODE'] ?? '';
-        $logData['isRecurring'] = '1';
+        $logData = $logger->buildResponseLog($logData, 'Success', $params, $customer, TRUE);
         $logger->addLog($logData);
 
         $processresult = $response->PROCESSRESULT;

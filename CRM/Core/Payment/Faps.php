@@ -268,10 +268,6 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
    */
   public function doPayment(&$params, $component = 'contribute') {
 
-    // Initiate the dev Logger
-    $logger = new CRM_Utils_Log_RecurringPayment('dev');
-    $logData = [];
-
     // CRM_Core_Error::debug_var('doPayment params', $params);
 
     // Check for valid currency [todo: we have C$ support, but how do we check,
@@ -416,27 +412,19 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       $request['vaultId'] = $vault_id;
     }
 
-    // Log the data to dev Journal
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
+
+    // Make sure to not change the original request param
     $requestLog = $request;
 
     // Unset the confidential information from the request
-    $confidentialData = ['cardNumber', 'cardExpYear', 'cardExpMonth', 'cVV', 'ownerCity', 'ownerState', 'ownerStreet'];
-    foreach ($confidentialData as $confV) {
-      if(isset($requestLog[$confV])) {
-        unset($requestLog[$confV]);
-      }
-    }
-    if($vault_id) {
-      unset($requestLog['vaultKey']);
-      unset($requestLog['vaultId']);
-    }
+    $requestLog = $logger->removeConfidentialInfo($requestLog, $vault_id);
 
-    $logData = [
-      'orderId' => $request['orderId'],
-      'amount' => $request['transactionAmount'],
-      'paymentMethod' => 'Credit Card (1st Pay)',
-      'requestData' => json_encode($requestLog),
-    ];
+
+    // Build the request log
+    $logger->setPaymentMethod('Credit Card (1st Pay)');
+    $logData = $logger->buildRequestLog($requestLog);
 
     // Make the request.
     // CRM_Core_Error::debug_var('payment request', $request);
@@ -451,22 +439,14 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       $params['trxn_id'] = trim($result['data']['referenceNumber']).':'.time();
 
       // Log the Response Data
-      $logData['contributionId'] = $params['contributionID'] ?? '';
-      $logData['status'] = 'Success';
-      $logData['statusCode'] = $result['data']['authResponse'] ?? '';
-      $logData['remoteId'] = $params['trxn_id'] ?? '';
-      $logData['isRecurring'] = $isRecur ? $isRecur : 0;
+      $logData = $logger->buildResponseLog($logData, 'Success', $params, $result, $isRecur);
       $logger->addLog($logData);
 
       return $params;
     }
     else {
       // Log the Response Data
-      $logData['contributionId'] = $params['contributionID'] ?? '';
-      $logData['status'] = 'Failed';
-      $logData['statusCode'] = $result['data']['authResponse'] ?? '';
-      $logData['remoteId'] = $result['data']['referenceNumber'] ?? '';
-      $logData['isRecurring'] =  $isRecur ? $isRecur : 0;
+      $logData = $logger->buildResponseLog($logData, 'Failed', $params, $result, $isRecur);
       $logger->addLog($logData, $result['errorMessages']);
 
       return self::error($result);
