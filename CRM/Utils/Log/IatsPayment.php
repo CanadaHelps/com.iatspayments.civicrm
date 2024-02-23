@@ -161,6 +161,39 @@ class CRM_Utils_Log_IatsPayment {
         return $logData;
     }
 
+    public function buildPostDatedContributionLog($contribution, $paymentMethod = '', $status = '', $isRecur = 0): array {
+        // Log the data
+        $logData = [];
+        $logData = [
+            "invoiceNum" => $contribution->invoice_id,
+            "amount" => $contribution->total_amount,
+            "paymentMethod" => $paymentMethod,
+            "requestData" => json_encode($contribution),
+            "contributionId" => $contribution->id,
+            "status" => $status,
+            "statusCode" => '',
+            "remoteId" => '',
+            "isRecurring" => $isRecur ?? 0,
+        ];
+        return $logData;
+    }
+
+    public function buildRecurringSeriesLog($recurData,  $paymentMethod = '', $status = ''): array {
+        $logData = [];
+        $logData = [
+            "invoiceNum" => '',
+            "amount" => $recurData->amount,
+            "paymentMethod" => $paymentMethod,
+            "requestData" => json_encode($recurData),
+            "contributionId" => $recurData->id,
+            "status" => $status,
+            "statusCode" => '',
+            "remoteId" => '',
+            "isRecurring" => (int) 1,
+        ];
+        return $logData;
+    }
+
     private function addHeader(): void {
         $file = fopen($this->csvFilePath, 'a');
         $defaultHeader = [

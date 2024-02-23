@@ -271,8 +271,14 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       }
       else {
         //Add Data to the internal log
-        $logData = $logger->buildResponseLog($logData, 'Success', $params, $customer, TRUE);
-        $logger->addLog($logData);
+        $logStatus = 'Success';
+        $logMessage = NULL;
+        if (strtotime("now") < strtotime($params['receive_date'])) {
+          $logStatus = 'Scheduled';
+          $logMessage = 'ScheduledDate: '.date("F jS, Y", strtotime($params['receive_date']));
+        }
+        $logData = $logger->buildResponseLog($logData, $logStatus, $params, $customer, TRUE);
+        $logger->addLog($logData, $logMessage);
 
         $processresult = $response->PROCESSRESULT;
         $customer_code = (string) $processresult->CUSTOMERCODE;
