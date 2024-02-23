@@ -182,10 +182,10 @@ class CRM_Utils_Log_IatsPayment {
         $logData = [];
         $logData = [
             "invoiceNum" => '',
-            "amount" => $recurData->amount,
+            "amount" => $recurData['amount'],
             "paymentMethod" => $paymentMethod,
             "requestData" => json_encode($recurData),
-            "contributionId" => $recurData->id,
+            "contributionId" => $recurData['id'],
             "status" => $status,
             "statusCode" => '',
             "remoteId" => '',
