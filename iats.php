@@ -876,7 +876,7 @@ function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
       ])) {
       //LogData
       if($op == 'edit') {
-        $logStatus = 'Update Recurring Series';
+        $logStatus = 'Success (Updated Recurring Series)';
         $logPaymentMethod = 'Credit Card (1st Pay)';
         if($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'EFT')) {
           $logPaymentMethod = 'ACH_EFT';

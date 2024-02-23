@@ -532,6 +532,22 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
     );
     $token_request = new CRM_Iats_FapsRequest($options);
     $request = $this->convertParams($params, $options['action']);
+
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
+
+    // Make sure to not change the original request param
+    $requestLog = $request;
+
+    // Unset the confidential information from the request
+    $requestLog = $logger->removeConfidentialInfo($requestLog);
+
+    // Build the request log
+    $logger->setPaymentMethod('Credit Card (1st Pay)');
+    $requestLog['invoice_id'] = '';
+    $requestLog['total_amount'] = $requestLog['transactionAmount'];
+    $logData = $logger->buildRequestLog($requestLog, true);
+
     // Make the request.
     // CRM_Core_Error::debug_var('token request', $request);
     $result = $token_request->request($credentials, $request);
@@ -540,10 +556,40 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
     unset($request['creditCardCryptogram']);
     unset($token_request);
     if (!empty($result['isSuccess'])) {
+      // Log the Response Data
+      $result['result']['auth_response'] = $params['recurProcessorID'];
+      $logData = $logger->buildResponseLog($logData, 'Success (Update CC Payment details)', $contribution_recur, $result, true, true);
+      // Curate LogMessage
+      $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($contribution_recur['next_sched_contribution_date']));
+      $logMessage['changedBy_UserId'] = CRM_Core_Session::singleton()->getLoggedInContactID();
+      if(!empty($logMessage['changedBy_UserId'])) {
+        $changeByContact = CRM_Contact_BAO_Contact::getContactDetails($logMessage['changedBy_UserId']);
+        if(!empty($changeByContact)) {
+          $logMessage['changedBy_UserName'] = $changeByContact[0] ?? '';
+          $logMessage['changedBy_UserEmail'] = $changeByContact[1] ?? '';
+        }
+      }
+      $logger->addLog($logData, $logMessage);
+
       // some of the result[data] is not useful, we're assuming it's not harmful to include in future requests here.
       $params = array_merge($params, $result['data']);
     }
     else {
+      // Log the Response Data
+      $result['result']['auth_response'] = $params['recurProcessorID'] ?? '';
+      $logData = $logger->buildResponseLog($logData, 'Failed (Update CC Payment details)', $contribution_recur, $result, true, true);
+      // Curate LogMessage
+      $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($contribution_recur['next_sched_contribution_date']));
+      $logMessage['changedBy_UserId'] = CRM_Core_Session::singleton()->getLoggedInContactID();
+      if(!empty($logMessage['changedBy_UserId'])) {
+        $changeByContact = CRM_Contact_BAO_Contact::getContactDetails($logMessage['changedBy_UserId']);
+        if(!empty($changeByContact)) {
+          $logMessage['changedBy_UserName'] = $changeByContact[0] ?? '';
+          $logMessage['changedBy_UserEmail'] = $changeByContact[1] ?? '';
+        }
+      }
+      $logger->addLog($logData, $logMessage);
+
       return self::error($result);
     }
 
