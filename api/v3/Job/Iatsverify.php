@@ -191,7 +191,7 @@ function civicrm_api3_job_iatsverify($params) {
               'source' => $contribution['source'],
               'trxn_id' => $trxn_id,
             ));
-            $logData['status'] = 'completed';
+            $logData['status'] = 'SUCCESS';
             $logger->addLog($logData);
             break;
           case 4: // failed, just update the contribution status.
@@ -199,7 +199,7 @@ function civicrm_api3_job_iatsverify($params) {
               'id' => $contribution['id'],
               'contribution_status_id' => $contribution_status_id,
             ));
-            $logData['status'] = 'failed';
+            $logData['status'] = 'FAILED_IATS';
             $logger->addLog($logData);
             break;
         }

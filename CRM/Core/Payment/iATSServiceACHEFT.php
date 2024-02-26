@@ -233,7 +233,7 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       $result = $iats->result($response);
       if ($result['status']) {
         //Add the response data to the internal log
-        $logData = $logger->buildResponseLog($logData, 'Success', $params, $result, FALSE);
+        $logData = $logger->buildResponseLog($logData, 'PENDING', $params, $result, FALSE);
         $logger->addLog($logData);
 
         $params['payment_status_id'] = 2;
@@ -254,7 +254,7 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       }
       else {
         //Add the response data to the internal log
-        $logData = $logger->buildResponseLog($logData, 'Failed', $params, $result, FALSE);
+        $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $result, FALSE);
         $logger->addLog($logData, $result['reasonMessage']);
 
         return self::error($result['reasonMessage']);
@@ -265,7 +265,7 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       $customer = $iats->result($response);
       if (!$customer['status']) {
         //Add Data to the internal log
-        $logData = $logger->buildResponseLog($logData, 'Failed', $params, $customer, TRUE);
+        $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $customer, TRUE);
         $logger->addLog($logData, $customer['reasonMessage']);
         return self::error($customer['reasonMessage']);
       }
@@ -274,7 +274,7 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
         $logStatus = 'Success';
         $logMessage = NULL;
         if (strtotime("now") < strtotime($params['receive_date'])) {
-          $logStatus = 'Scheduled';
+          $logStatus = 'SCHEDULED';
           $logMessage = 'ScheduledDate: '.date("F jS, Y", strtotime($params['receive_date']));
         }
         $logData = $logger->buildResponseLog($logData, $logStatus, $params, $customer, TRUE);

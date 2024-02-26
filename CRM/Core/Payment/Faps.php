@@ -439,14 +439,14 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       $params['trxn_id'] = trim($result['data']['referenceNumber']).':'.time();
 
       // Log the Response Data
-      $logData = $logger->buildResponseLog($logData, 'Success', $params, $result, $isRecur);
+      $logData = $logger->buildResponseLog($logData, 'SUCCESS', $params, $result, $isRecur);
       $logger->addLog($logData);
 
       return $params;
     }
     else {
       // Log the Response Data
-      $logData = $logger->buildResponseLog($logData, 'Failed', $params, $result, $isRecur);
+      $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $result, $isRecur);
       $logger->addLog($logData, $result['errorMessages']);
 
       return self::error($result);
@@ -558,7 +558,7 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
     if (!empty($result['isSuccess'])) {
       // Log the Response Data
       $result['result']['auth_response'] = $params['recurProcessorID'];
-      $logData = $logger->buildResponseLog($logData, 'Success (Update CC Payment details)', $contribution_recur, $result, true, true);
+      $logData = $logger->buildResponseLog($logData, 'UPDATED_CC', $contribution_recur, $result, true, true);
       // Curate LogMessage
       $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($contribution_recur['next_sched_contribution_date']));
       $logMessage['changedBy_UserId'] = CRM_Core_Session::singleton()->getLoggedInContactID();
@@ -577,7 +577,7 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
     else {
       // Log the Response Data
       $result['result']['auth_response'] = $params['recurProcessorID'] ?? '';
-      $logData = $logger->buildResponseLog($logData, 'Failed (Update CC Payment details)', $contribution_recur, $result, true, true);
+      $logData = $logger->buildResponseLog($logData, 'FAILED_CC', $contribution_recur, $result, true, true);
       // Curate LogMessage
       $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($contribution_recur['next_sched_contribution_date']));
       $logMessage['changedBy_UserId'] = CRM_Core_Session::singleton()->getLoggedInContactID();

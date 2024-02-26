@@ -842,7 +842,7 @@ function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
 
           // Save the LogData only for Credit Card
           if($op == 'create' && ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'Credit Card'))) {
-            $logData = $logger->buildPostDatedContributionLog($objectRef, 'Credit Card (1st Pay)' ,'Scheduled' ,true);
+            $logData = $logger->buildPostDatedContributionLog($objectRef, 'Credit Card (1st Pay)' ,'SCHEDULED' ,true);
             $logger->addLog($logData, 'ScheduledDate: '.date("F jS, Y", strtotime($objectRef->receive_date)));
           }
           $objectRef->save();
@@ -934,7 +934,7 @@ function iats_civicrm_postProcess($formName, &$form) {
     parse_str(html_entity_decode($parseEntryUrl['query']));
     $params['id'] = $crid;
     //LogData
-    $logStatus = 'Success (Updated Recurring Series)';
+    $logStatus = 'UPDATED_RECUR';
     $logData = $logger->buildRecurringSeriesLog($params, $paymentProcessor, $logStatus);
 
     // Curate LogMessage
