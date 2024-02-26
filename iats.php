@@ -934,7 +934,7 @@ function iats_civicrm_postProcess($formName, &$form) {
     parse_str(html_entity_decode($parseEntryUrl['query']));
     $params['id'] = $crid;
     //LogData
-    $logStatus = 'Success (Updated Recurring Series)';
+    $logStatus = 'UPDATED_RECUR';
     $logData = $logger->buildRecurringSeriesLog($params, $paymentProcessor, $logStatus);
 
     // Curate LogMessage

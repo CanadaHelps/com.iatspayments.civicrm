@@ -265,7 +265,9 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     $output[] = $result['message'];
 
     // Log the Response Data
-    $resultForLog = $result['result']['success'] ? 'Success' : 'Failed';
+    $resultForLog = $result['result']['success'] ? 'SUCCESS' : 'FAILED_IATS';
+    if($paymentMethodForLog == 'ACH_EFT' && $resultForLog == 'SUCCESS')
+      $resultForLog = 'PENDING';
     $logData = $logger->buildResponseLog($logData, $resultForLog, $contribution, $result, TRUE, TRUE);
     $logger->addLog($logData, $result['result']['message']);
 
