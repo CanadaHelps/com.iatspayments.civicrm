@@ -271,7 +271,7 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       }
       else {
         //Add Data to the internal log
-        $logStatus = 'Success';
+        $logStatus = 'PENDING';
         $logMessage = NULL;
         if (strtotime("now") < strtotime($params['receive_date'])) {
           $logStatus = 'SCHEDULED';
