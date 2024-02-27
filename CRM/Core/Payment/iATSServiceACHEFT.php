@@ -270,16 +270,6 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
         return self::error($customer['reasonMessage']);
       }
       else {
-        //Add Data to the internal log
-        $logStatus = 'PENDING';
-        $logMessage = NULL;
-        if (strtotime("now") < strtotime($params['receive_date'])) {
-          $logStatus = 'SCHEDULED';
-          $logMessage = 'ScheduledDate: '.date("F jS, Y", strtotime($params['receive_date']));
-        }
-        $logData = $logger->buildResponseLog($logData, $logStatus, $params, $customer, TRUE);
-        $logger->addLog($logData, $logMessage);
-
         $processresult = $response->PROCESSRESULT;
         $customer_code = (string) $processresult->CUSTOMERCODE;
         $email = '';
@@ -339,6 +329,11 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
           $this->updateContribution($params, $update);
           // and now return the updates to core via the params
           $params = array_merge($params, $update);
+          //Add Data to the internal log
+          $logStatus = 'SCHEDULED';
+          $logMessage = 'ScheduledDate: '.date("F jS, Y", strtotime($params['receive_date']));
+          $logData = $logger->buildResponseLog($logData, $logStatus, $params, $customer, TRUE);
+          $logger->addLog($logData, $logMessage);
           return $params;
         }
         else {
@@ -371,9 +366,19 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
                 Civi::log()->info('Unexpected error adding the trxn_id for contribution id {id}: {error}', array('id' => $recur_id, 'error' => $error));
               }
             }
+            //Add Data to the internal log
+            $logStatus = 'PENDING';
+            $logData = $logger->buildResponseLog($logData, $logStatus, $params, $customer, TRUE);
+            $logger->addLog($logData);
             return $params;
           }
           else {
+            $logStatus = 'FAILED_IATS';
+            // Add new keys to the result param
+            $result['AUTHORIZATIONRESULT'] = $result['auth_result'];
+            $result['CUSTOMERCODE'] = $customer['CUSTOMERCODE'];
+            $logData = $logger->buildResponseLog($logData, $logStatus, $params, $result, TRUE);
+            $logger->addLog($logData, $result['reasonMessage']);
             return self::error($result['reasonMessage']);
           }
         }
