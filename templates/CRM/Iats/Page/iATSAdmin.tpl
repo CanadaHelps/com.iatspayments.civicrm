@@ -56,3 +56,23 @@
     </tr>
   {/foreach}
 </table>
+
+<table class="iats-download">
+  <tr>
+    <td>
+      <form method="GET" action="/civicrm/download/iatsjournal">
+        <fieldset><legend>Download ACH/EFT Status Log</legend></fieldset>
+        <input type="submit" value="Download" class='crm-button-primary'>
+        <div class="description">*Download the CSV file for all the EFT/ACH payment.</div>
+      </form>
+    </td>
+    <td>
+      <form method="GET" action="/civicrm/download/iatsjournal">
+        <fieldset><legend>Download DMS Live Payment Log</legend></fieldset>
+        <input type="hidden" name="file_type" value="dev" />
+        <input type="submit" value="Download" class='crm-button-primary'>
+        <div class="description">*This file contains all the request and response log data of the DMS Live Payments.</div>
+      </form>
+    </td>
+  </tr>
+</table>
