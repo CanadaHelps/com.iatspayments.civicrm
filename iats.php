@@ -821,6 +821,9 @@ function iats_civicrm_buildForm_CRM_Contribute_Form_UpdateBilling(&$form) {
 }
 
 function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
+  // Initiate the dev Logger
+  $logger = new CRM_Utils_Log_IatsPayment('dev');
+
   if ($objectName == 'Contribution') {
     $contributionStatus = array_flip(CRM_Contribute_PseudoConstant::contributionStatus());
     if ($objectRef->contribution_recur_id && $objectRef->contribution_status_id == $contributionStatus['Pending']) {
@@ -836,6 +839,12 @@ function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
         $recurObj->find(TRUE);
         if (strtotime("now") < strtotime($recurObj->start_date)) {
           $objectRef->contribution_status_id = $contributionStatus['Scheduled'];
+
+          // Save the LogData only for Credit Card
+          if($op == 'create' && ($objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'Credit Card'))) {
+            $logData = $logger->buildPostDatedContributionLog($objectRef, 'Credit Card (1st Pay)' ,'SCHEDULED' ,true);
+            $logger->addLog($logData, 'ScheduledDate: '.date("F jS, Y", strtotime($objectRef->receive_date)));
+          }
           $objectRef->save();
         }
       }
@@ -902,5 +911,47 @@ function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
           $objectRef->save();
       }
     }
+  }
+}
+
+
+// Post Process hook for logging data
+function iats_civicrm_postProcess($formName, &$form) {
+  if($formName == 'CRM_Contribute_Form_UpdateSubscription') {
+    $paymentProcessor = $form->getVar('_paymentProcessor')['name'];
+    if(!empty($paymentProcessor)) {
+      if($paymentProcessor == 'EFT') {
+        $paymentProcessor = 'ACH_EFT';
+      } else {
+        $paymentProcessor = 'Credit Card (1st Pay)';
+      }
+    }
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
+
+    $params = CRM_Utils_Request::exportValues();
+    $parseEntryUrl = parse_url($params['entryURL']);
+    parse_str(html_entity_decode($parseEntryUrl['query']));
+    $params['id'] = $crid;
+    //LogData
+    $logStatus = 'UPDATED_RECUR';
+    $logData = $logger->buildRecurringSeriesLog($params, $paymentProcessor, $logStatus);
+
+    // Curate LogMessage
+    if(!empty($params['next_sched_contribution_date'])) {
+      $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($params['next_sched_contribution_date']));
+    } else {
+      $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($params['next_sched_contribution_date']));
+    }
+    $logMessage['changedBy_UserId'] = CRM_Core_Session::singleton()->getLoggedInContactID();
+    if(!empty($logMessage['changedBy_UserId'])) {
+      $changeByContact = CRM_Contact_BAO_Contact::getContactDetails($logMessage['changedBy_UserId']);
+      if(!empty($changeByContact)) {
+        $logMessage['changedBy_UserName'] = $changeByContact[0] ?? '';
+        $logMessage['changedBy_UserEmail'] = $changeByContact[1] ?? '';
+      }
+    }
+    //Add to the logger
+    $logger->addLog($logData, $logMessage);
   }
 }

@@ -34,4 +34,10 @@
     <page_callback>CRM_Iats_Form_IATSOneTimeCharge</page_callback>
     <title>IATSOneTimeCharge</title>
   </item>
+  <item>
+    <path>civicrm/download/iatsjournal</path>
+    <page_callback>CRM_Iats_Form_Report_DownloadJournal</page_callback>
+    <title>Download Recurring Journal</title>
+    <access_arguments>access CiviContribute</access_arguments>
+  </item>
 </menu>

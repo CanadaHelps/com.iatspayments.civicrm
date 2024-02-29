@@ -140,6 +140,12 @@ function civicrm_api3_job_iatsverify($params) {
         }
       }
       if (!empty($journal_entry)) {
+        // Initiate the Logger
+        $logger = new CRM_Utils_Log_IatsPayment();
+
+        // Add the data to be logged
+        $logData = $logger->buildACHRequestJournalLog($contribution, $journal_entry);
+
         // CRM_Core_Error::debug_var('Matching journal entry', $journal_entry);
         /* found a matching journal entry with a transaction id, we can approve or fail it */
         $is_recur = empty($contribution['contribution_recur_id']) ? FALSE : TRUE;
@@ -179,19 +185,22 @@ function civicrm_api3_job_iatsverify($params) {
               CRM_Core_Error::debug_var('Failed to complete transaction with', $complete);
               $error_log[] = 'Failed to complete transaction: ' . $e->getMessage() . "\n";
             }
-
             // Restore source field and trxn_id that completetransaction overwrites
             civicrm_api3('contribution', 'create', array(
               'id' => $contribution['id'],
               'source' => $contribution['source'],
               'trxn_id' => $trxn_id,
             ));
+            $logData['status'] = 'SUCCESS';
+            $logger->addLog($logData);
             break;
           case 4: // failed, just update the contribution status.
             civicrm_api3('Contribution', 'create', array(
               'id' => $contribution['id'],
               'contribution_status_id' => $contribution_status_id,
             ));
+            $logData['status'] = 'FAILED_IATS';
+            $logger->addLog($logData);
             break;
         }
         // Always log these requests in my cutom civicrm table for auditing type purposes
