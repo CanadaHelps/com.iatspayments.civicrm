@@ -244,6 +244,25 @@ class CRM_Utils_Log_IatsPayment {
         }
         return $csvFilePath;
     }
-    
+
+    public static function clearIatsLog(string $fileName = NULL): bool {
+        if(!empty($fileName)) {
+            $baseDir = CRM_Core_Config::singleton()->uploadDir.'iats/log/';
+            $filePath = $baseDir.$fileName.'.csv';
+            if (file_exists($filePath)) {
+                // Get current date and time
+                $dateTime = date('Y-m-d-H-i-s');
+
+                // Create the new filename
+                $newFilename = $fileName.'-'. $dateTime. ".csv";
+                $newFilePath = $baseDir . $newFilename;
+                // Rename the file
+                if (rename($filePath, $newFilePath))
+                   return true;
+                return false;
+            }
+        }
+        return false;
+    }
 }
 ?>
