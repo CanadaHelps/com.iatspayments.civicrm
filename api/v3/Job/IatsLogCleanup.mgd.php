@@ -23,6 +23,6 @@ return array(
       'api_action' => 'iatslogcleanup',
       'parameters' => '',
     ),
-    'update' => 'never',
+    'update' => 'always',
   ),
 );
