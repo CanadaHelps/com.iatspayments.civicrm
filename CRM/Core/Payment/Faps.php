@@ -267,7 +267,8 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
    * doesn't offer recurring contributions.
    */
   public function doPayment(&$params, $component = 'contribute') {
-
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
     // CRM_Core_Error::debug_var('doPayment params', $params);
 
     // Check for valid currency [todo: we have C$ support, but how do we check,
@@ -313,6 +314,20 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
         $request = array_merge($request, $result['data']);
       }
       else {
+        // Make sure to not change the original request param
+        $requestLog = $request;
+
+        // Unset the confidential information from the request
+        $requestLog = $logger->removeConfidentialInfo($requestLog, $vault_id);
+
+        // Build the request log
+        $logger->setPaymentMethod('Credit Card (1st Pay)');
+        $logData = $logger->buildRequestLog($requestLog);
+
+        // Log the Response Data
+        $params['contribution_recur_id'] = $params['contributionRecurID'];
+        $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $result, $isRecur);
+        $logger->addLog($logData, $result['errorMessages']);
         return self::error($result);
       }
       $options = array(
@@ -389,6 +404,7 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
         }
       }
       else {
+        watchdog("iats_debug", "Line 392: " . json_encode($result), [], WATCHDOG_DEBUG);
         return self::error($result);
       }
       // now set the options for taking the money
@@ -412,15 +428,11 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       $request['vaultId'] = $vault_id;
     }
 
-    // Initiate the dev Logger
-    $logger = new CRM_Utils_Log_IatsPayment('dev');
-
     // Make sure to not change the original request param
     $requestLog = $request;
 
     // Unset the confidential information from the request
     $requestLog = $logger->removeConfidentialInfo($requestLog, $vault_id);
-
 
     // Build the request log
     $logger->setPaymentMethod('Credit Card (1st Pay)');
@@ -441,11 +453,11 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       // Log the Response Data
       $logData = $logger->buildResponseLog($logData, 'SUCCESS', $params, $result, $isRecur);
       $logger->addLog($logData);
-
       return $params;
     }
     else {
       // Log the Response Data
+      $params['contribution_recur_id'] = $params['contributionRecurID'];
       $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $result, $isRecur);
       $logger->addLog($logData, $result['errorMessages']);
 
@@ -556,7 +568,7 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
     unset($request['creditCardCryptogram']);
     unset($token_request);
     if (!empty($result['isSuccess'])) {
-      // Log the Response Data
+      // Log the Response Datafail
       $result['result']['auth_response'] = $params['recurProcessorID'];
       $logData = $logger->buildResponseLog($logData, 'UPDATED_CC', $contribution_recur, $result, true, true);
       // Curate LogMessage

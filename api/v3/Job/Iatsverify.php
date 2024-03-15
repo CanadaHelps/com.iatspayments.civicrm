@@ -144,7 +144,7 @@ function civicrm_api3_job_iatsverify($params) {
         $logger = new CRM_Utils_Log_IatsPayment();
 
         // Add the data to be logged
-        $logData = $logger->buildACHRequestJournalLog($contribution, $journal_entry);
+        $logData = $logger->buildACHJournalLog($contribution, $journal_entry);
 
         // CRM_Core_Error::debug_var('Matching journal entry', $journal_entry);
         /* found a matching journal entry with a transaction id, we can approve or fail it */
