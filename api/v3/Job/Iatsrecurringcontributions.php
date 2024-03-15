@@ -288,6 +288,8 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
         // Should the failure count be reset otherwise? It is not.
         $contribution_recur_set['next_sched_contribution_date'] = $saved_next_sched_contribution_date;
       }
+
+      
     }
     civicrm_api('ContributionRecur', 'create', $contribution_recur_set);
     $result = civicrm_api('activity', 'create',
