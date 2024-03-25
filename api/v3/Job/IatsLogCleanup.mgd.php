@@ -20,7 +20,7 @@ return array(
       'description' => 'Cleanup Internal CSV Logs Monthly/Weekly ',
       'run_frequency' => 'Monthly',
       'api_entity' => 'Job',
-      'api_action' => 'iatslogcleanup',
+      'api_action' => 'iats_log_cleanup',
       'parameters' => '',
     ),
     'update' => 'always',
