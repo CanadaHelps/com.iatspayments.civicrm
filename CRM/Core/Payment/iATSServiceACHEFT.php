@@ -395,6 +395,10 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
             $result['CUSTOMERCODE'] = $customer['CUSTOMERCODE'];
             $logData = $logger->buildResponseLog($logData, $logStatus, $params, $result, TRUE);
             $logger->addLog($logData, $result['reasonMessage']);
+
+            // Log into ACH File as well
+            $logDataACH = $loggerACH->buildACHJournalLog($logData, $params, TRUE);
+            $loggerACH->addLog($logDataACH);
             return self::error($result['reasonMessage']);
           }
         }
