@@ -146,6 +146,7 @@ function civicrm_api3_job_iatsreport($params) {
         if (!$skip_method) {
           $iats_journal[$journal_setting_key] = date('Y-m-d H:i:s');
           // make the soap request, should return a csv file
+          $request['date'] = date('Y-m-d', strtotime('-2 Days')) . 'T00:00:00+00:00';
           $response = $iats->request($credentials, $request);
           // use my iats object to parse the result into an array of transaction ojects
           $transactions = $iats->getCSV($response, $method);
