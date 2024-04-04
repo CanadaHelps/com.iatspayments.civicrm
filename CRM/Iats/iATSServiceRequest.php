@@ -184,7 +184,6 @@ class CRM_Iats_iATSServiceRequest {
       /* until iATS fixes it's box verify, we need to have trace on to make the hack below work */
       
       $soapClient = new SoapClient($this->_wsdl_url, array('trace' => 1, 'soap_version' => SOAP_1_2, 'cache_wsdl' => WSDL_CACHE_MEMORY));
-      print_r($soapClient);die;
       /* build the request manually as per the iATS docs */
       $xml = '<' . $message . ' xmlns="' . $this->_wsdl_url_ns . '">';
       $request = array_merge($this->request, $credentials, $request_params);
