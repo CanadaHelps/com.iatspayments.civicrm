@@ -249,6 +249,7 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
 
     // Initiate the dev Logger
     $logger = new CRM_Utils_Log_IatsPayment('dev');
+    $loggerACH = new CRM_Utils_Log_IatsPayment();
 
     // Log the request
     $paymentMethodForLog = ($paymentProcessor['class_name'] == 'Payment_Faps') ?  'Credit Card (1st Pay)' : 'ACH_EFT';
@@ -271,6 +272,12 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     $logData = $logger->buildResponseLog($logData, $resultForLog, $contribution, $result, TRUE, TRUE);
     $logger->addLog($logData, $result['result']['message']);
 
+    // Log into ACH File as well
+    if($paymentMethodForLog == 'ACH_EFT'){
+      $logDataACH = $loggerACH->buildACHJournalLog($logData, $contribution, TRUE);
+      $loggerACH->addLog($logDataACH, $result['result']['message']);
+    }
+
     /* by default, just set the failure count back to 0 */
     $contribution_recur_set = array('version' => 3, 'id' => $contribution['contribution_recur_id'], 'failure_count' => '0', 'next_sched_contribution_date' => $next_collection_date);
     /* special handling for failures: try again at next opportunity if we haven't failed too often */
@@ -281,6 +288,8 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
         // Should the failure count be reset otherwise? It is not.
         $contribution_recur_set['next_sched_contribution_date'] = $saved_next_sched_contribution_date;
       }
+
+      
     }
     civicrm_api('ContributionRecur', 'create', $contribution_recur_set);
     $result = civicrm_api('activity', 'create',

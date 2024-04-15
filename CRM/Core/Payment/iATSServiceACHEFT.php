@@ -219,8 +219,9 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       'password'  => $this->_paymentProcessor['password'],
     );
 
-    // Initiate the dev Logger
+    // Initiate the dev and ACH Logger
     $logger = new CRM_Utils_Log_IatsPayment('dev');
+    $loggerACH = new CRM_Utils_Log_IatsPayment();
 
     // Log the Request
     $logger->setPaymentMethod('ACH_EFT');
@@ -234,7 +235,6 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       if ($result['status']) {
         //Add the response data to the internal log
         $logData = $logger->buildResponseLog($logData, 'PENDING', $params, $result, FALSE);
-        $logger->addLog($logData);
 
         $params['payment_status_id'] = 2;
         $params['trxn_id'] = trim($result['remote_id']) . ':' . time();
@@ -256,6 +256,10 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
         //Add the response data to the internal log
         $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $result, FALSE);
         $logger->addLog($logData, $result['reasonMessage']);
+        
+        // Log into ACH File as well
+        $logDataACH = $loggerACH->buildACHJournalLog($logData, $params ,TRUE);
+        $loggerACH->addLog($logDataACH, $result['reasonMessage']);
 
         return self::error($result['reasonMessage']);
       }
@@ -267,6 +271,10 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
         //Add Data to the internal log
         $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $customer, TRUE);
         $logger->addLog($logData, $customer['reasonMessage']);
+
+        // Log into ACH File as well
+        $logDataACH = $loggerACH->buildACHJournalLog($logData, $params, TRUE);
+        $loggerACH->addLog($logDataACH, $customer['reasonMessage']);
         return self::error($customer['reasonMessage']);
       }
       else {
@@ -334,6 +342,10 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
           $logMessage = 'ScheduledDate: '.date("F jS, Y", strtotime($params['receive_date']));
           $logData = $logger->buildResponseLog($logData, $logStatus, $params, $customer, TRUE);
           $logger->addLog($logData, $logMessage);
+
+          // Log into ACH File as well
+          $logDataACH = $loggerACH->buildACHJournalLog($logData, $params, TRUE);
+          $loggerACH->addLog($logDataACH, $logMessage);
           return $params;
         }
         else {
@@ -369,7 +381,11 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
             //Add Data to the internal log
             $logStatus = 'PENDING';
             $logData = $logger->buildResponseLog($logData, $logStatus, $params, $customer, TRUE);
+
             $logger->addLog($logData);
+            // Log into ACH File as well
+            $logDataACH = $loggerACH->buildACHJournalLog($logData, $params, TRUE);
+            $loggerACH->addLog($logDataACH);
             return $params;
           }
           else {
@@ -379,6 +395,10 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
             $result['CUSTOMERCODE'] = $customer['CUSTOMERCODE'];
             $logData = $logger->buildResponseLog($logData, $logStatus, $params, $result, TRUE);
             $logger->addLog($logData, $result['reasonMessage']);
+
+            // Log into ACH File as well
+            $logDataACH = $loggerACH->buildACHJournalLog($logData, $params, TRUE);
+            $loggerACH->addLog($logDataACH);
             return self::error($result['reasonMessage']);
           }
         }

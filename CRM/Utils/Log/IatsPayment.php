@@ -39,14 +39,13 @@ class CRM_Utils_Log_IatsPayment {
                     $logData['message'] = $logMessage;
                 }
             }
-
             fputcsv($file, array_values($logData));
             fclose($file);
         }
     }
 
     public static function removeConfidentialInfo(array $requestLog, $vault_id = FALSE): array {
-        $confidentialData = ['cardNumber', 'cardExpYear', 'cardExpMonth', 'cVV', 'ownerCity', 'ownerState', 'ownerStreet'];
+        $confidentialData = ['cardNumber', 'cardExpYear', 'cardExpMonth', 'cVV', 'cvv2Response', 'ownerCity', 'ownerState', 'ownerStreet'];
         foreach ($confidentialData as $confV) {
             if(isset($requestLog[$confV])) {
                 unset($requestLog[$confV]);
@@ -90,19 +89,37 @@ class CRM_Utils_Log_IatsPayment {
         return $logData;
     }
 
-    public function buildACHRequestJournalLog($contribution, $journal_entry): array {
+    public function buildACHJournalLog($contribution, $journal_entry = [], $notSaved = FALSE): array {
         $logData = [];
-        $logData = [
-            'contactID' => $contribution['contact_id'],
-            'contributionID' => $contribution['contribution_id'],
-            'amount' => $journal_entry['amt'],
-            'contributionRecurID' => $contribution['contribution_recur_id'],
-            'receiveDate' => $contribution['receive_date'],
-            'trxnID' => $contribution['trxn_id'],
-            'invoiceID' => $contribution['invoice_id'],
-            'paymentProcessor' => $journal_entry['tntyp'],
-            'response' => $journal_entry['auth_result']
-        ];
+        if($notSaved) {
+            // Compile the Log Data here
+            $logData = [
+                'contactID' => $journal_entry['contact_id'],
+                'contributionID' => $contribution['contributionId'],
+                'amount' => $contribution['amount'],
+                'contributionRecurID' => $journal_entry['contributionRecurID'],
+                'receiveDate' => $journal_entry['receive_date'],
+                'trxnID' => $journal_entry['trxn_id'],
+                'invoiceID' => $journal_entry['invoiceID'],
+                'paymentProcessor' => 'ACH_EFT',
+                'statusCode' => $contribution['response']->auth_result,
+                'response' => $contribution['response'],
+                'status' => $contribution['status'],
+            ];
+        } else {
+            $logData = [
+                'contactID' => $contribution['contact_id'],
+                'contributionID' => $contribution['contribution_id'],
+                'amount' => $journal_entry['amt'],
+                'contributionRecurID' => $contribution['contribution_recur_id'],
+                'receiveDate' => $contribution['receive_date'],
+                'trxnID' => $contribution['trxn_id'],
+                'invoiceID' => $contribution['invoice_id'],
+                'paymentProcessor' => $journal_entry['tntyp'],
+                'statusCode' => $journal_entry['auth_result'],
+                'response' => ''
+            ];
+        }
         return $logData;
     }
 
@@ -133,6 +150,8 @@ class CRM_Utils_Log_IatsPayment {
             $logData['statusCode'] = $authCode;
             $logData['remoteId'] = $result['result']['trxn_id'] ?? '';
             $logData['isRecurring'] = 1;
+            $logData['recurId'] = $params['contribution_recur_id'] ?? '';
+            $logData['response'] = json_encode(CRM_Utils_Log_IatsPayment::removeConfidentialInfo($result));
         } else {
             if($payment_method == 'Credit Card (1st Pay)') {
                 $logData['contributionId'] = $params['contributionID'] ?? '';
@@ -140,6 +159,8 @@ class CRM_Utils_Log_IatsPayment {
                 $logData['statusCode'] = $result['data']['authResponse'] ?? '';
                 $logData['remoteId'] = $params['trxn_id'] ?? '';
                 $logData['isRecurring'] = $isRecur ? $isRecur : 0;
+                $logData['recurId'] = $params['contribution_recur_id'] ?? '';
+                $logData['response'] = json_encode(CRM_Utils_Log_IatsPayment::removeConfidentialInfo($result));
             }
 
             if($payment_method == 'ACH_EFT') {
@@ -149,12 +170,16 @@ class CRM_Utils_Log_IatsPayment {
                     $logData['statusCode'] = $result['AUTHORIZATIONRESULT'] ?? '';
                     $logData['remoteId'] = $result['CUSTOMERCODE'] ?? '';
                     $logData['isRecurring'] = '1';
+                    $logData['recurId'] = $params['contribution_recur_id'] ?? '';
+                    $logData['response'] = json_encode(CRM_Utils_Log_IatsPayment::removeConfidentialInfo($result));
                 } else {
                     $logData['contributionId'] = $params['contributionID'] ?? '';
                     $logData['status'] = $status;
                     $logData['statusCode'] = $result['auth_result'] ?? '';
                     $logData['remoteId'] = $result['remote_id'] ?? '';
                     $logData['isRecurring'] = 0;
+                    $logData['recurId'] = $params['contribution_recur_id'] ?? '';
+                    $logData['response'] = json_encode(CRM_Utils_Log_IatsPayment::removeConfidentialInfo($result));
                 }
             }
         }
@@ -174,6 +199,8 @@ class CRM_Utils_Log_IatsPayment {
             "statusCode" => '',
             "remoteId" => '',
             "isRecurring" => $isRecur ?? 0,
+            "recurringID" => $contribution->contribution_recur_id ?? '',
+            "response" => '',
         ];
         return $logData;
     }
@@ -185,11 +212,13 @@ class CRM_Utils_Log_IatsPayment {
             "amount" => $recurData['amount'],
             "paymentMethod" => $paymentMethod,
             "requestData" => json_encode($recurData),
-            "contributionId" => $recurData['id'],
+            "contributionId" => '',
             "status" => $status,
             "statusCode" => '',
             "remoteId" => '',
             "isRecurring" => (int) 1,
+            "recurringID" => $recurData['id'] ?? '',
+            "response" => '',
         ];
         return $logData;
     }
@@ -205,7 +234,8 @@ class CRM_Utils_Log_IatsPayment {
             'Transaction ID',
             'Invoice ID',
             'Payment Processor',
-            'iATS Response',
+            'Status Code',
+            'Response',
             'Status',
             'Log Timestamp',
             'Log Message',
@@ -221,8 +251,10 @@ class CRM_Utils_Log_IatsPayment {
             'Status Code',
             'Remote ID',
             'Is Recurring',
+            'Recur ID',
+            'Response',
             'TimeStamp',
-            'Log Message',
+            'Log Message'
         ];
         if($this->fileType == 'dev') {
             fputcsv($file, $devHeader);
@@ -244,6 +276,25 @@ class CRM_Utils_Log_IatsPayment {
         }
         return $csvFilePath;
     }
-    
+
+    public static function clearIatsLog(string $fileName = NULL): bool {
+        if(!empty($fileName)) {
+            $baseDir = CRM_Core_Config::singleton()->uploadDir.'iats/log/';
+            $filePath = $baseDir.$fileName.'.csv';
+            if (file_exists($filePath)) {
+                // Get current date and time
+                $dateTime = date('Y-m-d-H-i-s');
+
+                // Create the new filename
+                $newFilename = $fileName.'-'. $dateTime. ".csv";
+                $newFilePath = $baseDir . $newFilename;
+                // Rename the file
+                if (rename($filePath, $newFilePath))
+                   return true;
+                return false;
+            }
+        }
+        return false;
+    }
 }
 ?>
