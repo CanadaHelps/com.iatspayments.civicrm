@@ -234,7 +234,7 @@ class CRM_Utils_Log_IatsPayment {
     }
 
     public static function getCSVFilePath(string $fileType = '', string $fileName = "iatslog"): string {
-        $baseDir = CRM_Core_Config::singleton()->uploadDir.'iats/log/';
+        $baseDir = CRM_Core_Config::singleton()->customFileUploadDir.'iats/log/';
         if (!is_dir($baseDir)) {
             mkdir($baseDir, 0775, true);
         }
