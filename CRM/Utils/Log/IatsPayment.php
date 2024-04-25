@@ -279,7 +279,7 @@ class CRM_Utils_Log_IatsPayment {
 
     public static function clearIatsLog(string $fileName = NULL): bool {
         if(!empty($fileName)) {
-            $baseDir = CRM_Core_Config::singleton()->uploadDir.'iats/log/';
+            $baseDir = CRM_Core_Config::singleton()->customFileUploadDir.'iats/log/';
             $filePath = $baseDir.$fileName.'.csv';
             if (file_exists($filePath)) {
                 // Get current date and time
