@@ -207,6 +207,7 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     if (count($errors)) {
       ++$error_count;
       ++$counter;
+
       /* create a failed contribution record, don't bother talking to iats */
       $contribution['contribution_status_id'] = 4;
       $contributionResult = civicrm_api('contribution', 'create', $contribution);
@@ -256,8 +257,13 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
     $logger->setPaymentMethod($paymentMethodForLog);
     $logData = $logger->buildRequestLog($contribution, TRUE);
 
+
+    // watchdog("debug", "Recurring Debug: Contribution ID = ".$contribution['id']." Contact ID = ".$contribution['contact_id']." Recur ID = ".$contribution['contribution_recur_id'], [], WATCHDOG_DEBUG);
+    // watchdog("debug", "Recurring Debug: Payment Processor = ".json_encode($paymentProcessor)." Payment Token = ".json_encode($payment_token), [], WATCHDOG_DEBUG);
     $result = CRM_Iats_Transaction::process_contribution_payment($contribution, $paymentProcessor, $payment_token);
     
+    // watchdog("debug", "Recurring Debug: Result = ".json_encode($result), [], WATCHDOG_DEBUG);
+
     // append result message to report if I'm going to mail out a failures
     // report
     if ($email_failure_report && !$result['result']['success']) {
@@ -271,9 +277,15 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
       $resultForLog = 'PENDING';
     $logData = $logger->buildResponseLog($logData, $resultForLog, $contribution, $result, TRUE, TRUE);
     $logger->addLog($logData, $result['result']['message']);
+    // watchdog("debug", "Recurring Debug: Completed Logging Log = ".json_encode($result['result']['message']), [], WATCHDOG_DEBUG);
+
 
     // Log into ACH File as well
     if($paymentMethodForLog == 'ACH_EFT'){
+      // watchdog("debug", "Recurring Debug Before ACH logging LogData = ".json_encode($logData). ", Contribution = ".json_encode($contribution), [], WATCHDOG_DEBUG);
+      // Correcting Fields for ACH Log
+      $contribution['invoiceID'] = $contribution['invoice_id'];
+      $contribution['contributionRecurID'] = $contribution['contribution_recur_id'];
       $logDataACH = $loggerACH->buildACHJournalLog($logData, $contribution, TRUE);
       $loggerACH->addLog($logDataACH, $result['result']['message']);
     }
