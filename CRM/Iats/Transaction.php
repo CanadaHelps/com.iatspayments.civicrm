@@ -1,4 +1,5 @@
 <?php
+use CRM_Canadahelps_ExtensionUtils as E;
 /**
  * @file IATS Service transaction utility class
  *
@@ -169,12 +170,17 @@ class CRM_Iats_Transaction {
         // If repeattransaction succeded.
         // First restore/add various fields that the repeattransaction api may overwrite or ignore.
         // TODO - fix this in core to allow these to be set above.
+        // Empty Custom Receipt Number for recurring contributions
+        $receiptNumberCustomID = E::getCustomFieldID('Receipt_Number');
+        $isReceiptedCustomID = E::getCustomFieldID('Is_Receipted_');
         try {
           civicrm_api3('contribution', 'create', array('id' => $contribution['id'], 
             'invoice_id' => $contribution['invoice_id'],
             'source' => $contribution['source'],
             'receive_date' => $contribution['receive_date'],
             'payment_instrument_id' => $contribution['payment_instrument_id'],
+            $receiptNumberCustomID => ['IS NULL' => 1],
+            $isReceiptedCustomID => 0,
             // '' => $contribution['receive_date'],
           ));
         }
@@ -432,7 +438,7 @@ class CRM_Iats_Transaction {
     $today = date('Ymd').'030000';
     // If not set, only allow for the first 28 days of the month.
     if (max($allow_days) <= 0) {
-      $allow_days = range(1,31);
+      $allow_days = range(1,28);
     }
     for ($j = 0; $j < count($allow_days); $j++) {
       // So I don't get into an infinite loop somehow ..

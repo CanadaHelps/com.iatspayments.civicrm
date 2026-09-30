@@ -34,6 +34,9 @@ cj(function ($) {
     // iframes
     if (iatsSettings.paymentInstrumentId == '1') {
       var transactionType = isRecur ? 'Auth' : 'Sale';
+      if ($("form#UpdateBilling").length) {
+        var transactionType = "Auth";
+      }
     }
     else {
       var transactionType = isRecur ? 'Vault' : 'AchDebit';

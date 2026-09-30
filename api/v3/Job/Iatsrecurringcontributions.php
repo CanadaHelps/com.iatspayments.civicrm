@@ -62,6 +62,10 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
   if (!$lock->acquire()) {
     return civicrm_api3_create_success(ts('Failed to acquire lock. No contribution records were processed.'));
   }
+
+  // CH Customization: initiate the dev Logger
+  $logger = new CRM_Utils_Log_IatsPayment('dev');
+
   // Restrict this method of recurring contribution processing to only iATS (Faps + Legacy) active payment processors.
   // TODO: exclude test processors?
   $fapsProcessors = _iats_filter_payment_processors('Faps%', array(), array('active' => 1));
@@ -96,7 +100,7 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
   $get = array(
       'next_sched_contribution_date' => ['<=' => $dtCurrentDayEnd],
       'payment_processor_id' => ['IN' => array_keys($paymentProcessors)],
-      'contribution_status_id' => ['IN' => ['In Progress']],
+      'contribution_status_id' => ['IN' => ["In Progress", "Scheduled", "Ongoing"]],
       'payment_token_id' => ['>' => 0],
       'options' => ['limit' => 0],
       'return' => ['id', 'contact_id', 'amount', 'failure_count', 'payment_processor_id', 'next_sched_contribution_date',
@@ -211,7 +215,7 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
         'contribution_recur_id'  => $contribution_recur_id,
         'invoice_id'       => $hash,
         'source'         => $source,
-        'contribution_status_id' => 'Pending', /* initialize as pending, so we can run completetransaction after taking the money */
+        'contribution_status_id' => ['IN' => ["Pending", "In Progress", "Scheduled"]], /* initialize as pending, so we can run completetransaction after taking the money */
         'currency'  => $recurringContribution['currency'],
         'payment_processor'   => $payment_processor_id,
         'is_test'        => $is_test, /* propagate the is_test value from the recurring record */
@@ -233,7 +237,7 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
           'return' => array('id'),
           'trxn_id' => array('IS NULL' => 1),
           'contribution_recur_id' => $contribution_recur_id,
-          'contribution_status_id' => "Pending",
+          'contribution_status_id' => ['IN' => ["Pending", "In Progress", "Scheduled"]],
         ));
         if (!empty($pending_contribution['id'])) {
           $contribution['id'] = $pending_contribution['id'];
@@ -291,6 +295,16 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
       $next_collection_date = date('Y-m-d H:i:s', strtotime('+'.$recurringContribution['frequency_interval'].' '.$recurringContribution['frequency_unit'], $receive_ts));
       // Note: keep track of the currently defined "next_sched_contribution_date" as "current_sched_contribution_date" in case of confirmed transient card failures.
       $contribution_recur_update = array('id' => $contribution['contribution_recur_id'], 'next_sched_contribution_date' => $next_collection_date, 'failure_count' => $recurringContribution['failure_count'], 'failure_threshold' => $failure_threshhold, 'current_sched_contribution_date' => $recurringContribution['next_sched_contribution_date']);
+
+      // CH Customization: Initiate the dev Logger
+      $logger = new CRM_Utils_Log_IatsPayment('dev');
+      $loggerACH = new CRM_Utils_Log_IatsPayment();
+
+      // CH Customization: Log the request
+      $paymentMethodForLog = ($paymentProcessor['class_name'] == 'Payment_Faps') ?  'Credit Card (1st Pay)' : 'ACH_EFT';
+      $logger->setPaymentMethod($paymentMethodForLog);
+      $logData = $logger->buildRequestLog($contribution, TRUE);
+
       // process the payment and update the contribution and recurring contribution records:
       $result = CRM_Iats_Transaction::process_contribution_payment($contribution, $paymentProcessor, $payment_token, $contribution_recur_update);
       // in case of failure:
@@ -299,7 +313,24 @@ function civicrm_api3_job_Iatsrecurringcontributions($params) {
       if (!$result['result']['success']) {
         if ($email_failure_report) {
           $failure_report_text .= "\n".$result['message'];
-	}
+
+          // CH Customization: Log the Response Data
+          $resultForLog = $result['result']['success'] ? 'SUCCESS' : 'FAILED_IATS';
+          if ($paymentMethodForLog == 'ACH_EFT' && $resultForLog == 'SUCCESS')
+            $resultForLog = 'PENDING';
+          $logData = $logger->buildResponseLog($logData, $resultForLog, $contribution, $result, TRUE, TRUE);
+          $logger->addLog($logData, $result['result']['message']);
+
+          // Log into ACH File as well
+          if ($paymentMethodForLog == 'ACH_EFT') {
+            // Correcting Fields for ACH Log
+            $contribution['invoiceID'] = $contribution['invoice_id'];
+            $contribution['contributionRecurID'] = $contribution['contribution_recur_id'];
+            $logDataACH = $loggerACH->buildACHJournalLog($logData, $contribution, TRUE);
+            $loggerACH->addLog($logDataACH, $result['result']['message']);
+          }
+	      }
+
         // Send receipt with error message if a contribution fails and is set $email_failure_contribution_receipt
         if ($email_failure_contribution_receipt) {
           civicrm_api3('Contribution', 'sendconfirmation', [

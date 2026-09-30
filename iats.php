@@ -725,3 +725,155 @@ function _iats_payment_status_complete() {
     'payment_status' => 'Completed',
   ];
 }
+
+
+
+/**************************************
+* CH Custom Functions
+***************************************/
+
+// Post Process hook for logging data
+function iats_civicrm_postProcess($formName, &$form) {
+  if($formName == 'CRM_Contribute_Form_UpdateSubscription') {
+    $paymentProcessor = $form->getVar('_paymentProcessor')['name'];
+    if(!empty($paymentProcessor)) {
+      if($paymentProcessor == 'EFT') {
+        $paymentProcessor = 'ACH_EFT';
+      } else {
+        $paymentProcessor = 'Credit Card (1st Pay)';
+      }
+    }
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
+
+    $params = CRM_Utils_Request::exportValues();
+    $parseEntryUrl = parse_url($params['entryURL']);
+    parse_str(html_entity_decode($parseEntryUrl['query']));
+    $params['id'] = $crid; //$crid = CRM_Utils_Request::retrieve('crid', 'Integer', $form, FALSE);
+    //LogData
+    $logStatus = 'UPDATED_RECUR';
+    $logData = $logger->buildRecurringSeriesLog($params, $paymentProcessor, $logStatus);
+
+    // Curate LogMessage
+    if(!empty($params['next_sched_contribution_date'])) {
+      $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($params['next_sched_contribution_date']));
+    } else {
+      $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($params['next_sched_contribution_date']));
+    }
+    $logMessage['changedBy_UserId'] = CRM_Core_Session::singleton()->getLoggedInContactID();
+    if(!empty($logMessage['changedBy_UserId'])) {
+      $changeByContact = CRM_Contact_BAO_Contact::getContactDetails($logMessage['changedBy_UserId']);
+      if(!empty($changeByContact)) {
+        $logMessage['changedBy_UserName'] = $changeByContact[0] ?? '';
+        $logMessage['changedBy_UserEmail'] = $changeByContact[1] ?? '';
+      }
+    }
+    //Add to the logger
+    $logger->addLog($logData, $logMessage);
+  }
+}
+
+
+// CH Customization
+// CRM-711: Update contribution and recurring contribution statuses
+function iats_civicrm_post($op, $objectName, $objectId, &$objectRef) {
+
+  if ($objectName == 'Contribution' || $objectName == 'ContributionRecur') {
+    $isEFTPayment         = $objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'EFT');
+    $isCreditCardPayment  = $objectRef->payment_instrument_id == CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'payment_instrument_id', 'Credit Card');
+    $contributionStatuses = array_flip(CRM_Contribute_BAO_Contribution::buildOptions('contribution_status_id'));
+    $contributionRecurStatuses = array_flip(CRM_Contribute_BAO_ContributionRecur::buildOptions('contribution_status_id'));
+    $now = strtotime("now");
+  }
+
+  // Initiate the dev Logger
+  $logger = new CRM_Utils_Log_IatsPayment('dev');
+
+  if ($objectName == 'Contribution') {
+
+    if ($objectRef->contribution_recur_id && $objectRef->contribution_status_id == $contributionStatuses['Pending']) {
+      if (!empty($objectRef->id) && empty($objectRef->payment_instrument_id)) {
+        $objectRef->find(TRUE);
+      }
+      if (($isEFTPayment || $isCreditCardPayment) && empty($objectRef->trxn_id)) {
+        $recurObj = new CRM_Contribute_DAO_ContributionRecur();
+        $recurObj->id = $objectRef->contribution_recur_id;
+        $recurObj->find(TRUE);
+        if ($now < strtotime($recurObj->start_date)) {
+          $objectRef->contribution_status_id = $contributionStatuses['Scheduled'];
+
+          // Save the LogData only for Credit Card
+          if($op == 'create' && $isCreditCardPayment) {
+            $logData = $logger->buildPostDatedContributionLog($objectRef, 'Credit Card (1st Pay)' ,'SCHEDULED' ,true);
+            $logger->addLog($logData, 'ScheduledDate: '.date("F jS, Y", strtotime($objectRef->receive_date)));
+          }
+
+          $objectRef->save();
+        }
+      }
+    }
+    elseif ($objectRef->contribution_status_id == $contributionStatuses['Pending']) {
+      if (!empty($objectRef->id) && (empty($objectRef->payment_instrument_id) || empty($objectRef->contribution_recur_id))) {
+        $objectRef->find(TRUE);
+      }
+      if (!empty($objectRef->contribution_recur_id) && $isCreditCardPayment) {
+        $recurObj = new CRM_Contribute_DAO_ContributionRecur();
+        $recurObj->id = $objectRef->contribution_recur_id;
+        $recurObj->find(TRUE);
+        if (!empty($recurObj->payment_processor_id) && in_array(civicrm_api3('PaymentProcessor', 'getsingle', ['id' => $recurObj->payment_processor_id])['class_name'], ['Payment_Faps', 'Payment_iATSServiceACHEFT'])) {
+          $recurObj->contribution_status_id = $contributionRecurStatuses['Ongoing'];
+          $recurObj->save();
+        }
+      }
+    }
+  }
+  if ($objectName == 'ContributionRecur') {
+    $start_date = strtotime($objectRef->start_date);
+    if (!empty($objectRef->id) && (empty($objectRef->payment_instrument_id) || empty($objectRef->contribution_status_id))) {
+      $objectRef->find(TRUE);
+    }
+    if ($isEFTPayment || $isCreditCardPayment) {
+      // Pending: Change status to Scheduled if start date not passed yet
+      if ($objectRef->contribution_status_id == $contributionRecurStatuses['Pending'] &&
+        $now < $start_date
+      ) {
+        $objectRef->contribution_status_id = $contributionRecurStatuses['Scheduled'];
+        $objectRef->save();
+      }
+
+      // In Progress: Change status to Scheduled (start date not passed yet) or Ongoing if previous recur
+      if ($objectRef->contribution_status_id == $contributionRecurStatuses['In Progress']) {
+        $status = ($now < strtotime($objectRef->start_date)) ? 'Scheduled' : 'Ongoing';
+        if ($status == 'Ongoing') {
+          $count = CRM_Core_DAO::singleValueQuery(sprintf("
+            SELECT count(id)
+            FROM civicrm_contribution
+            WHERE contribution_recur_id = %s AND contribution_status_id = %s",
+            $objectRef->id,
+            $contributionStatuses['Completed']
+          ));
+          $status = $count > 0 ? $status : 'In Progress';
+        }
+        $objectRef->contribution_status_id = $contributionRecurStatuses[$status];
+        $objectRef->save();
+      }
+
+      // EFT: Change status to Ongoing (if previous recur) or In Progress (1st)
+      if ($isEFTPayment && 
+        $objectRef->contribution_status_id == $contributionRecurStatuses['Scheduled'] &&
+        $now > $start_date
+      ) {
+          $count = CRM_Core_DAO::singleValueQuery(sprintf("
+            SELECT count(id)
+            FROM civicrm_contribution
+            WHERE contribution_recur_id = %s AND contribution_status_id = %s",
+            $objectRef->id,
+            $contributionStatuses['Completed']
+          ));
+          $status = $count > 0 ? 'Ongoing' : 'In Progress';
+          $objectRef->contribution_status_id = $contributionRecurStatuses[$status];
+          $objectRef->save();
+      }
+    }
+  }
+}

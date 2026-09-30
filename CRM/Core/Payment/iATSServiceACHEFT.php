@@ -230,12 +230,24 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       'agentCode' => $this->_paymentProcessor['user_name'],
       'password'  => $this->_paymentProcessor['password'],
     );
+
+    // CH Customization: Initiate the dev and ACH Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
+    $loggerACH = new CRM_Utils_Log_IatsPayment();
+
+    // CH Customization: Log the Request
+    $logger->setPaymentMethod('ACH_EFT');
+    $logData = $logger->buildRequestLog($request);
+
     // Make the soap request.
     $response = $iats->request($credentials, $request);
     if (!$isRecur) {
       // Process the soap response into a readable result, logging any transaction.
       $result = $iats->result($response);
       if ($result['status']) {
+        // CH Customization: Add the response data to the internal log
+        $logData = $logger->buildResponseLog($logData, 'PENDING', $params, $result, FALSE);
+
         $params['payment_status_id'] = 2;
         $params['trxn_id'] = trim($result['remote_id']) . ':' . time();
         // Core assumes that a pending result will have no transaction id, but we have a useful one.
@@ -253,6 +265,14 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
         return $params;
       }
       else {
+        // CH Customization: Add the response data to the internal log
+        $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $result, FALSE);
+        $logger->addLog($logData, $result['reasonMessage']);
+
+        // Log into ACH File as well
+        $logDataACH = $loggerACH->buildACHJournalLog($logData, $params ,TRUE);
+        $loggerACH->addLog($logDataACH, $result['reasonMessage']);
+
         return self::error($result['reasonMessage']);
       }
     }
@@ -260,6 +280,15 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
       // Save the customer info in to the CiviCRM core payment_token table
       $customer = $iats->result($response);
       if (!$customer['status']) {
+
+        // CH Customization: Add Data to the internal log
+        $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $customer, TRUE);
+        $logger->addLog($logData, $customer['reasonMessage']);
+
+        // Log into ACH File as well
+        $logDataACH = $loggerACH->buildACHJournalLog($logData, $params, TRUE);
+        $loggerACH->addLog($logDataACH, $customer['reasonMessage']);
+
         return self::error($customer['reasonMessage']);
       }
       else {
@@ -322,6 +351,17 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
           $this->updateContribution($params, $update);
           // and now return the updates to core via the params
           $params = array_merge($params, $update);
+
+          // CH Customization: Add Data to the internal log
+          $logStatus = 'SCHEDULED';
+          $logMessage = 'ScheduledDate: '.date("F jS, Y", strtotime($params['receive_date']));
+          $logData = $logger->buildResponseLog($logData, $logStatus, $params, $customer, TRUE);
+          $logger->addLog($logData, $logMessage);
+
+          // Log into ACH File as well
+          $logDataACH = $loggerACH->buildACHJournalLog($logData, $params, TRUE);
+          $loggerACH->addLog($logDataACH, $logMessage);
+
           return $params;
         }
         else {
@@ -354,9 +394,32 @@ class CRM_Core_Payment_iATSServiceACHEFT extends CRM_Core_Payment_iATSService {
                 Civi::log()->info('Unexpected error adding the trxn_id for contribution id {id}: {error}', array('id' => $recur_id, 'error' => $error));
               }
             }
+
+            // CH Customization: Add Data to the internal log
+            $logStatus = 'PENDING';
+            $logData = $logger->buildResponseLog($logData, $logStatus, $params, $customer, TRUE);
+            $logger->addLog($logData);
+
+            // Log into ACH File as well
+            $logDataACH = $loggerACH->buildACHJournalLog($logData, $params, TRUE);
+            $loggerACH->addLog($logDataACH);
+
             return $params;
           }
           else {
+
+            // CH Customization: Add Data to the internal log
+            $logStatus = 'FAILED_IATS';
+            // Add new keys to the result param
+            $result['AUTHORIZATIONRESULT'] = $result['auth_result'];
+            $result['CUSTOMERCODE'] = $customer['CUSTOMERCODE'];
+            $logData = $logger->buildResponseLog($logData, $logStatus, $params, $result, TRUE);
+            $logger->addLog($logData, $result['reasonMessage']);
+
+            // Log into ACH File as well
+            $logDataACH = $loggerACH->buildACHJournalLog($logData, $params, TRUE);
+            $loggerACH->addLog($logDataACH);
+
             return self::error($result['reasonMessage']);
           }
         }

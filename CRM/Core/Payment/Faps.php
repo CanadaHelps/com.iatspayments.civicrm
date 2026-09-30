@@ -267,6 +267,9 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
    * doesn't offer recurring contributions.
    */
   public function doPayment(&$params, $component = 'contribute') {
+    // CH Customization: Initiate the dev Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
+
     // CRM_Core_Error::debug_var('doPayment params', $params);
     if (empty($params['amount'])) {
       return _iats_payment_status_complete();
@@ -307,6 +310,22 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
         $request = array_merge($request, $result['data']);
       }
       else {
+        // CH Customization: log
+        // Make sure to not change the original request param
+        $requestLog = $request;
+
+        // Unset the confidential information from the request
+        $requestLog = $logger->removeConfidentialInfo($requestLog, $vault_id);
+
+        // Build the request log
+        $logger->setPaymentMethod('Credit Card (1st Pay)');
+        $logData = $logger->buildRequestLog($requestLog);
+
+        // Log the Response Data
+        $params['contribution_recur_id'] = $params['contributionRecurID'];
+        $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $result, $isRecur);
+        $logger->addLog($logData, $result['errorMessages']);
+
         return self::error($result);
       }
       $options = array(
@@ -378,9 +397,12 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
           // otherwise, just call updateRecurring for some housekeeping
           // before taking the payment.
           $this->updateRecurring($params);
+          // Query the vault to get the expiry date of the card that we have just used and store it in the payment token table for use in reports.
+          $this->updateTokenExpiry($vault_key, $token_result['id']);
         }
       }
       else {
+        watchdog("iats_debug", "Line 392: " . json_encode($result), [], WATCHDOG_DEBUG);
         return self::error($result);
       }
       // now set the options for taking the money
@@ -403,6 +425,18 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       $request['vaultKey'] = $vault_key;
       $request['vaultId'] = $vault_id;
     }
+
+    // CH Customization: Make sure to not change the original request param
+    $requestLog = $request;
+
+    // CH Customization: Unset the confidential information from the request
+    $requestLog = $logger->removeConfidentialInfo($requestLog, $vault_id);
+
+
+    // Build the request log
+    $logger->setPaymentMethod('Credit Card (1st Pay)');
+    $logData = $logger->buildRequestLog($requestLog);
+
     // Make the request.
     // CRM_Core_Error::debug_var('payment request', $request);
     $result = $payment_request->request($credentials, $request);
@@ -414,9 +448,19 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
       // For versions >= 4.6.6, the proper key.
       $params['payment_status_id'] = 1;
       $params['trxn_id'] = trim($result['data']['referenceNumber']).':'.time();
+
+      // CH Customization: Log the Response Data
+      $logData = $logger->buildResponseLog($logData, 'SUCCESS', $params, $result, $isRecur);
+      $logger->addLog($logData);
+
       return $params;
     }
     else {
+      // CH Customization: Log the Response Data
+      $params['contribution_recur_id'] = $params['contributionRecurID'];
+      $logData = $logger->buildResponseLog($logData, 'FAILED_IATS', $params, $result, $isRecur);
+      $logger->addLog($logData, $result['errorMessages']);
+
       return self::error($result);
     }
   }
@@ -511,10 +555,56 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
 //      'cardtype' => 'credit_card_type',
       'cVV' => 'cvv2',
       'creditCardCryptogram' => 'cryptogram',
+      'ownerName' => [
+        'billing_first_name',
+        'billing_last_name',
+      ],
     );
+    // CH Customization used for updateBilling
+    if ($method == 'VaultCreateCCRecord') {
+      $convert = array_merge($convert, [
+        'cardType' => 'cardtype',
+        'creditCardToken' => 'creditCardToken',
+        'cardExpMonth' => 'cardExpMonth',
+        'cardExpYear' => 'cardExpYear',
+        'ownerName' => [
+          'first_name',
+          'middle_name',
+          'last_name',
+        ],
+        'defaultAccount' => 'defaultAccount',
+        'vaultKey' => 'token',
+      ]);
+    }
+
     foreach ($convert as $r => $p) {
+      if ($r == 'ownerName') {
+        $request[$r] = '';
+        foreach ($p as $namePart) {
+          $request[$r] .= !empty($params[$namePart]) ? $params[$namePart] . ' ' : '';
+        }
+        continue;
+      }
       if (isset($params[$p])) {
-        $request[$r] = htmlspecialchars($params[$p]);
+        if ($r == 'cardtype') {
+          $mop = [
+            'Visa' => 'VISA',
+            'MasterCard' => 'MC',
+            'Amex' => 'AMX',
+            'Discover' => 'DSC',
+          ];
+          $request[$r] = $mop[$params[$p]];
+        }
+        elseif($r == 'defaultAccount') {
+          $request[$r] = true;
+        }
+        elseif ($r == 'vaultKey') {
+          $matches = explode(':', $params[$p]);
+          $request[$r] = $matches[0];
+        }
+        else {
+          $request[$r] = htmlspecialchars($params[$p]);
+        }
       }
     }
     if (empty($params['email'])) {
@@ -525,7 +615,7 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
         $request['ownerEmail'] = $params['email-Primary'];
       }
     }
-    $request['ownerName'] = $params['billing_first_name'].' '.$params['billing_last_name'];
+    //$request['ownerName'] = $params['billing_first_name'].' '.$params['billing_last_name'];
     if (!empty($params['month'])) {
       $request['cardExpMonth'] = sprintf('%02d', $params['month']);
     }
@@ -571,7 +661,7 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
     else { /* in the event I'm handling an unexpected argument */
       throw new PaymentProcessorException(ts('Unknown System Error.'), 'process_1stpay_extension');
     }
-    return $e;
+    return $error;
   }
 
   /*
@@ -652,7 +742,171 @@ class CRM_Core_Payment_Faps extends CRM_Core_Payment {
   }
 
 
+
+  // CH Customization
+  // CRM-1047 Expiry dates of Credit Cards not saved properly in the database
+  public function updateTokenExpiry($vault_key, $token_id) {
+    $credentials = array(
+      'merchantKey' => $this->_paymentProcessor['signature'],
+      'processorId' => $this->_paymentProcessor['user_name']
+    );
+    $requestOptions = array(
+       'action' => 'VaultQueryVault',
+        'test' => $this->is_test,
+     );
+     $vault_request = new CRM_Iats_FapsRequest($requestOptions);
+     $requestResult = $vault_request->request($credentials, [
+       'queryVaultKey' => $vault_key,
+     ]);
+     if (!empty($requestResult['isSuccess'])) {
+       $card = $requestResult['data']['VaultContainers'][0]['vaultCreditCards'][0];
+       try {
+         civicrm_api3('PaymentToken', 'create', [
+            'id' => $token_id,
+             'expiry_date' => date('Y-m-t H:i:s', strtotime($card['expirationMonth'] . '/01/' . $card['expirationYear'])),
+          ]);
+       }
+       catch (Exception $e) {
+         \Civi::log()->debug('Failure to update payment token with expiry date', ['paymentTokenId' => $token_id, 'card' => $card]);
+       }
+     }
+  }
+
+  // CH Customization
+  /*
+   * Implement the ability to update the billing info for recurring contributions,
+   * This functionality will apply to back-end and front-end,
+   * so it's only enabled when configured as on via the iATS admin settings.
+   * The default isSupported method is overridden above to achieve this.
+   *
+   * Return TRUE on success or an error.
+   */
+  public function updateSubscriptionBillingInfo(&$message = '', $params = array()) {
+    // Fix billing form update bug https://github.com/iATSPayments/com.iatspayments.civicrm/issues/252 by getting crid from _POST
+    if (empty($params['crid'])) {
+      $params['crid'] = !empty($_POST['crid']) ? (int) $_POST['crid'] : (!empty($_GET['crid']) ? (int) $_GET['crid'] : 0);
+      if (empty($params['crid']) && !empty($params['entryURL'])) {
+        $components = parse_url($params['entryURL']);
+        parse_str(html_entity_decode($components['query']), $entryURLquery);
+        $params['crid'] = $entryURLquery['crid'];
+      }
+    }
+    // updatedBillingInfo array changed sometime after 4.7.27
+    $crid = !empty($params['crid']) ? $params['crid'] : $params['recur_id'];
+    if (empty($crid)) {
+      $alert = ts('This system is unable to perform self-service updates to credit cards. Please contact the administrator of this site.');
+      throw new Exception($alert);
+    }
+    $contribution_recur = civicrm_api3('ContributionRecur', 'getsingle', ['id' => $crid]);
+    $payment_token = civicrm_api3('PaymentToken', 'getsingle', ['id' => $contribution_recur['payment_token_id']]);
+    $params['token'] = $payment_token['token'];
+    $params['defaultAccount'] = true;
+    $result = CRM_Iats_FapsRequest::credentials($contribution_recur['payment_processor_id']);
+    $credentials = [
+      'merchantKey' => $result['signature'],
+      'processorId' => $result['user_name'],
+    ];
+    // Generate token from creditcardcryptogram
+    $options = array(
+      'action' => 'GenerateTokenFromCreditCard',
+    );
+    $token_request = new CRM_Iats_FapsRequest($options);
+    $request = $this->convertParams($params, $options['action']);
+
+    // Initiate the dev Logger
+    $logger = new CRM_Utils_Log_IatsPayment('dev');
+
+    // Make sure to not change the original request param
+    $requestLog = $request;
+
+    // Unset the confidential information from the request
+    $requestLog = $logger->removeConfidentialInfo($requestLog);
+
+    // Build the request log
+    $logger->setPaymentMethod('Credit Card (1st Pay)');
+    $requestLog['invoice_id'] = '';
+    $requestLog['total_amount'] = $requestLog['transactionAmount'];
+    $logData = $logger->buildRequestLog($requestLog, true);
+
+    // Make the request.
+    // CRM_Core_Error::debug_var('token request', $request);
+    $result = $token_request->request($credentials, $request);
+    // CRM_Core_Error::debug_var('token result', $result);
+    // unset the cryptogram request values, we can't use the cryptogram again and don't want to return it anyway.
+    unset($request['creditCardCryptogram']);
+    unset($token_request);
+    if (!empty($result['isSuccess'])) {
+
+      // Log the Response Datafail
+      $result['result']['auth_response'] = $params['recurProcessorID'];
+      $logData = $logger->buildResponseLog($logData, 'UPDATED_CC', $contribution_recur, $result, true, true);
+      // Curate LogMessage
+      $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($contribution_recur['next_sched_contribution_date']));
+      $logMessage['changedBy_UserId'] = CRM_Core_Session::singleton()->getLoggedInContactID();
+      if(!empty($logMessage['changedBy_UserId'])) {
+        $changeByContact = CRM_Contact_BAO_Contact::getContactDetails($logMessage['changedBy_UserId']);
+        if(!empty($changeByContact)) {
+          $logMessage['changedBy_UserName'] = $changeByContact[0] ?? '';
+          $logMessage['changedBy_UserEmail'] = $changeByContact[1] ?? '';
+        }
+      }
+      $logger->addLog($logData, $logMessage);
+
+      // some of the result[data] is not useful, we're assuming it's not harmful to include in future requests here.
+      $params = array_merge($params, $result['data']);
+    }
+    else {
+
+      // Log the Response Data
+      $result['result']['auth_response'] = $params['recurProcessorID'] ?? '';
+      $logData = $logger->buildResponseLog($logData, 'FAILED_CC', $contribution_recur, $result, true, true);
+      // Curate LogMessage
+      $logMessage['NextScheduledDate'] = date("F jS, Y", strtotime($contribution_recur['next_sched_contribution_date']));
+      $logMessage['changedBy_UserId'] = CRM_Core_Session::singleton()->getLoggedInContactID();
+      if(!empty($logMessage['changedBy_UserId'])) {
+        $changeByContact = CRM_Contact_BAO_Contact::getContactDetails($logMessage['changedBy_UserId']);
+        if(!empty($changeByContact)) {
+          $logMessage['changedBy_UserName'] = $changeByContact[0] ?? '';
+          $logMessage['changedBy_UserEmail'] = $changeByContact[1] ?? '';
+        }
+      }
+      $logger->addLog($logData, $logMessage);
+
+      return self::error($result);
+    }
+
+    // construct the array of data that I'll submit to the iATS Payments server.
+    $options = [
+      'action' => 'VaultCreateCCRecord',
+    ];
+    $vault_request = new CRM_Iats_FapsRequest($options);
+
+    $request = $this->convertParams($params, $options['action']);
+
+    // Make the soap request.
+    try {
+      $response = $vault_request->request($credentials, $request);
+      // note: don't log this to the iats_response table.
+      // CRM_Core_Error::debug_var('faps result', $response);
+      if (empty($response['isError'])) {
+        if (!empty($response['data']['id'])) {
+          // We update the payment token.
+          $newToken = $request['vaultKey'] . ":" . $response['data']['id'];
+          civicrm_api3('PaymentToken', 'create', [
+            'id' => $contribution_recur['payment_token_id'],
+            'token' => $newToken,
+          ]);
+        }
+        return TRUE;
+      }
+      else {
+        return self::error($response);
+      }
+    }
+    catch (Exception $error) { // what could go wrong?
+      $message = $error->getMessage();
+      throw new PaymentProcessorException($message, '9002');
+    }
+  }
+
 }
-
-
-

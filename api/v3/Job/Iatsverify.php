@@ -84,7 +84,7 @@ function civicrm_api3_job_iatsverify($params) {
     'sequential' => 1,
     'receive_date' => array('>' => "now - $verify_days day"),
     'options' => array('limit' => 0),
-    'contribution_status_id' => array('IN' => array('Pending')),
+    'contribution_status_id' => array('IN' => array("Pending", "In Progress")),
     'invoice_id' => array('IS NOT NULL' => 1),
     'contribution_test' => 0,
     'return' => array('trxn_id', 'invoice_id', 'contribution_recur_id', 'contact_id', 'source'),
@@ -140,6 +140,12 @@ function civicrm_api3_job_iatsverify($params) {
         }
       }
       if (!empty($journal_entry)) {
+        // CH Customization: Initiate the Logger
+        $logger = new CRM_Utils_Log_IatsPayment();
+
+        // CH Customization: Add the data to be logged
+        $logData = $logger->buildACHJournalLog($contribution, $journal_entry);
+
         // CRM_Core_Error::debug_var('Matching journal entry', $journal_entry);
         /* found a matching journal entry with a transaction id, we can approve or fail it */
         $is_recur = empty($contribution['contribution_recur_id']) ? FALSE : TRUE;
@@ -186,12 +192,18 @@ function civicrm_api3_job_iatsverify($params) {
               'source' => ($contribution['contribution_source'] ?? $contribution['source']),
               'trxn_id' => $trxn_id,
             ));
+            // CH Customization: log
+            $logData['status'] = 'SUCCESS';
+            $logger->addLog($logData);
             break;
           case 4: // failed, just update the contribution status.
             civicrm_api3('Contribution', 'create', array(
               'id' => $contribution['id'],
               'contribution_status_id' => $contribution_status_id,
             ));
+            // CH Customization: log
+            $logData['status'] = 'FAILED_IATS';
+            $logger->addLog($logData);
             break;
         }
         // Always log these requests in my cutom civicrm table for auditing type purposes
